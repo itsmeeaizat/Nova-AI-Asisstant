@@ -23,8 +23,8 @@ import {
   MapPin,
   Camera
 } from 'lucide-react';
-import { Attachment, Message } from '../types/chat';
-import { ModelOption } from '../config/endpoints';
+import { Attachment, Message, VoiceSettings } from '../types/chat';
+import { ModelOption, ApiKeysConfig } from '../config/endpoints';
 import { audioService } from '../services/audioService';
 import { LocationCard } from './LocationCard';
 import { ImageLightbox } from './ImageLightbox';
@@ -33,6 +33,8 @@ interface ChatAreaProps {
   messages: Message[];
   isLoading: boolean;
   activeModel: ModelOption;
+  voiceSettings?: VoiceSettings;
+  apiKeys?: ApiKeysConfig;
   onSelectPromptPreset: (promptText: string) => void;
   onRegenerateMessage: (messageIndex: number) => void;
   onCopyText: (text: string) => void;
@@ -43,6 +45,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   messages,
   isLoading,
   activeModel,
+  voiceSettings,
+  apiKeys,
   onSelectPromptPreset,
   onRegenerateMessage,
   onCopyText,
@@ -53,6 +57,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [copiedCodeId, setCopiedCodeId] = React.useState<string | null>(null);
   const [activeSpeechId, setActiveSpeechId] = React.useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = React.useState(false);
+  const [isLoadingSpeech, setIsLoadingSpeech] = React.useState(false);
   const [showScrollBottom, setShowScrollBottom] = React.useState(false);
   const [lightboxAttachment, setLightboxAttachment] = React.useState<Attachment | null>(null);
 
@@ -60,6 +65,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   React.useEffect(() => {
     const unsub = audioService.onStateChange((state) => {
       setIsSpeaking(state.isSpeaking);
+      setIsLoadingSpeech(state.isLoading);
       setActiveSpeechId(state.activeMessageId);
     });
     return unsub;
@@ -109,9 +115,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
 
     try {
-      await audioService.speakBrowserTts(msg.content, msg.id);
+      await audioService.speakMessage(
+        msg.content,
+        {
+          provider: voiceSettings?.provider || 'gemini',
+          voice: voiceSettings?.voiceId || 'Kore',
+          speed: voiceSettings?.speed || 1.0,
+          emotion: voiceSettings?.emotion || 'natural',
+          apiKeys,
+        },
+        msg.id
+      );
     } catch (err: any) {
-      onShowToast(err.message || 'Speech playback failed', 'error');
+      onShowToast(err.message || 'Real-time neural audio playback failed', 'error');
     }
   };
 
@@ -274,22 +290,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         </span>
                       </button>
 
-                      {/* Read aloud TTS */}
+                      {/* Read aloud Neural Voice */}
                       <button
                         id={`btn-speak-msg-${msg.id || index}`}
                         onClick={() => handleToggleSpeech(msg)}
                         className={`p-1.5 rounded-lg hover:bg-neutral-900 transition-colors flex items-center gap-1 ${
-                          isMsgSpeaking ? 'text-sky-400 font-semibold animate-pulse' : 'hover:text-neutral-200'
+                          isMsgSpeaking 
+                            ? 'text-indigo-400 font-semibold bg-indigo-950/40 border border-indigo-800/40' 
+                            : isLoadingSpeech && activeSpeechId === msg.id
+                            ? 'text-amber-400 animate-pulse'
+                            : 'hover:text-neutral-200'
                         }`}
-                        title={isMsgSpeaking ? 'Stop speech' : 'Read aloud'}
+                        title={isMsgSpeaking ? 'Stop neural audio' : 'Play neural audio voice'}
                       >
                         {isMsgSpeaking ? (
                           <VolumeX className="w-3.5 h-3.5" />
                         ) : (
-                          <Volume2 className="w-3.5 h-3.5" />
+                          <Volume2 className={`w-3.5 h-3.5 ${isLoadingSpeech && activeSpeechId === msg.id ? 'animate-spin' : ''}`} />
                         )}
                         <span className="text-[11px] hidden sm:inline">
-                          {isMsgSpeaking ? 'Speaking...' : 'Read'}
+                          {isMsgSpeaking ? 'Playing...' : isLoadingSpeech && activeSpeechId === msg.id ? 'Synthesizing...' : 'Voice'}
                         </span>
                       </button>
 
@@ -383,63 +403,63 @@ const WelcomeHero: React.FC<WelcomeHeroProps> = ({ activeModel, onSelectPrompt }
       </div>
 
       <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-100 tracking-tight">
-        How can Nova help you today?
+        Apa yang bisa Nova bantu hari ini?
       </h1>
       <p className="text-xs sm:text-sm text-neutral-400 mt-2 max-w-md leading-relaxed">
-        Powered by <strong className="text-neutral-200">{activeModel.name}</strong> with multimodal vision, file uploads, real-time GPS location, and voice dictation.
+        Didukung model mutakhir <strong className="text-neutral-200">{activeModel.name}</strong> dengan visi multimodal, unggah berkas, lokasi GPS aktif, dan suara neural cerdas.
       </p>
 
       {/* Quick Starter Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full mt-8 text-left">
         <button
-          onClick={() => onSelectPrompt('What are the best attractions, cafes, and recommended places around my current GPS location?')}
+          onClick={() => onSelectPrompt('Apa saja rekomendasi tempat wisata, kafe populer, dan kuliner terbaik di sekitar lokasi GPS saya saat ini?')}
           className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-emerald-800/60 transition-all text-xs flex flex-col gap-1 group shadow-xs"
         >
           <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-emerald-300">
             <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Nearby & Local GPS Insights</span>
+            <span>Rekomendasi Sekitar & GPS Aktif</span>
           </div>
           <span className="text-neutral-400 line-clamp-2">
-            Recommend top spots, cafes, and routes near my active coordinates.
+            Cari tempat menarik, rute, dan info lokal berdasarkan koordinat langsung.
           </span>
         </button>
 
         <button
-          onClick={() => onSelectPrompt('Analyze this uploaded image in detail, extract any text or diagram elements, and summarize its key takeaways.')}
+          onClick={() => onSelectPrompt('Analisis gambar yang saya unggah ini secara detail, ekstrak teks yang ada di dalamnya, dan rangkum informasi utamanya.')}
           className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-sky-800/60 transition-all text-xs flex flex-col gap-1 group shadow-xs"
         >
           <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-sky-300">
             <Camera className="w-4 h-4 text-sky-400 shrink-0" />
-            <span>Vision & Multimodal Analysis</span>
+            <span>Analisis Gambar & Vision Multimodal</span>
           </div>
           <span className="text-neutral-400 line-clamp-2">
-            Extract diagrams, OCR text, or analyze photos with high precision.
+            Ekstrak teks gambar (OCR), baca diagram, dan analisa foto secara presisi.
           </span>
         </button>
 
         <button
-          onClick={() => onSelectPrompt('Explain the differences between REST and GraphQL with practical code examples in TypeScript.')}
+          onClick={() => onSelectPrompt('Jelaskan perbedaan mendasar antara arsitektur REST dan GraphQL lengkap dengan contoh kode praktis di TypeScript.')}
           className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-neutral-700 transition-all text-xs flex flex-col gap-1 group shadow-xs"
         >
           <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-indigo-300">
             <Terminal className="w-4 h-4 text-indigo-400 shrink-0" />
-            <span>Architecture & Code</span>
+            <span>Arsitektur Sistem & Kode Program</span>
           </div>
           <span className="text-neutral-400 line-clamp-2">
-            Explain REST vs GraphQL with TypeScript code comparisons.
+            Bahas perbandingan REST vs GraphQL beserta contoh implementasi kode.
           </span>
         </button>
 
         <button
-          onClick={() => onSelectPrompt('Summarize this document, identify the main objectives, risks, and next action items.')}
+          onClick={() => onSelectPrompt('Tolong buatkan ringkasan terstruktur dari dokumen ini, temukan poin penting, risiko, dan langkah tindak lanjutnya.')}
           className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-neutral-700 transition-all text-xs flex flex-col gap-1 group shadow-xs"
         >
           <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-amber-300">
             <FileText className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Document & Data Deep Dive</span>
+            <span>Bedah Dokumen & Data Mendalam</span>
           </div>
           <span className="text-neutral-400 line-clamp-2">
-            Analyze PDFs, logs, JSON, or CSVs with deep structured insights.
+            Analisis berkas PDF, log data, JSON, atau catatan dengan ringkasan tajam.
           </span>
         </button>
       </div>

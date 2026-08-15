@@ -56,15 +56,22 @@ app.post('/api/chat', async (req, res) => {
 
 app.post('/api/speech', async (req, res) => {
   try {
-    const { text, voice } = req.body;
+    const { text, voice, provider, speed, emotion, apiKeys } = req.body;
     if (!text) {
-      return res.status(400).json({ success: false, error: 'Text is required for TTS' });
+      return res.status(400).json({ success: false, error: 'Text is required for Real-Time Neural Speech' });
     }
-    const result = await processSpeechRequest(text, voice || 'Kore');
+    const result = await processSpeechRequest({
+      text,
+      voice,
+      provider,
+      speed,
+      emotion,
+      clientKeys: apiKeys,
+    });
     res.json({ success: true, data: result });
   } catch (err: any) {
     console.error('Speech endpoint error:', err);
-    res.status(500).json({ success: false, error: err.message || 'TTS Error' });
+    res.status(500).json({ success: false, error: err.message || 'Generative Neural Audio Error' });
   }
 });
 

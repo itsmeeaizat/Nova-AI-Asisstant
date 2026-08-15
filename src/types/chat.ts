@@ -59,14 +59,36 @@ export interface ChatSession {
   tags?: string[];
 }
 
+export type VoiceProvider = 'gemini' | 'openai' | 'elevenlabs';
+
+export interface VoiceOption {
+  id: string;
+  name: string;
+  provider: VoiceProvider;
+  gender: 'female' | 'male' | 'neutral';
+  tone: string;
+  description: string;
+  sampleText?: string;
+}
+
+export interface VoiceSettings {
+  provider: VoiceProvider;
+  voiceId: string;
+  speed: number;
+  emotion: 'natural' | 'warm' | 'excited' | 'calm' | 'professional' | 'whisper';
+  autoPlayReplies: boolean;
+}
+
 export interface GenerationSettings {
   temperature: number;
   topP: number;
   topK: number;
   thinkingLevel: 'HIGH' | 'LOW' | 'MINIMAL';
   enableWebSearch: boolean;
-  speechVoice: string;
-  speechSpeed: number;
+  enforceIndonesian?: boolean;
+  voiceSettings?: VoiceSettings;
+  speechVoice?: string;
+  speechSpeed?: number;
 }
 
 export interface ApiLogEntry {

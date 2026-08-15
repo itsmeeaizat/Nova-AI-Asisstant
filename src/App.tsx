@@ -23,12 +23,14 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
 import { SettingsModal } from './components/SettingsModal';
+import { LiveVoiceOverlay } from './components/LiveVoiceOverlay';
 import { ToastContainer, ToastMessage } from './components/Toast';
 
 const STORAGE_KEY_SESSIONS = 'nova_ai_sessions_v1';
 const STORAGE_KEY_SETTINGS = 'nova_ai_settings_v1';
 const STORAGE_KEY_ENDPOINTS = 'nova_ai_endpoints_v1';
 const STORAGE_KEY_APIKEYS = 'nova_ai_apikeys_v1';
+const STORAGE_KEY_CUSTOM_INSTRUCTION = 'nova_ai_custom_instruction_v1';
 
 export default function App() {
   // Models & Personas
@@ -36,7 +38,14 @@ export default function App() {
   const [selectedModel, setSelectedModel] = React.useState<ModelOption>(AVAILABLE_MODELS[0]);
   const [personas] = React.useState<SystemPersona[]>(SYSTEM_PERSONAS);
   const [selectedPersona, setSelectedPersona] = React.useState<SystemPersona>(SYSTEM_PERSONAS[0]);
-  const [customSystemInstruction, setCustomSystemInstruction] = React.useState<string>(SYSTEM_PERSONAS[0].prompt);
+  const [customSystemInstruction, setCustomSystemInstruction] = React.useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_INSTRUCTION);
+      return saved && saved.trim() ? saved : SYSTEM_PERSONAS[0].prompt;
+    } catch {
+      return SYSTEM_PERSONAS[0].prompt;
+    }
+  });
 
   // API Keys (Multi-Provider: Gemini, Claude, Kimi, OpenAI, DeepSeek, Groq, Custom)
   const [apiKeys, setApiKeys] = React.useState<ApiKeysConfig>(() => {
@@ -61,17 +70,36 @@ export default function App() {
   const [generationSettings, setGenerationSettings] = React.useState<GenerationSettings>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
-      return saved
-        ? JSON.parse(saved)
-        : {
-            temperature: 0.7,
-            topP: 0.95,
-            topK: 64,
-            thinkingLevel: 'HIGH',
-            enableWebSearch: false,
-            speechVoice: 'Kore',
-            speechSpeed: 1.0,
-          };
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          voiceSettings: parsed.voiceSettings || {
+            provider: 'gemini',
+            voiceId: parsed.speechVoice || 'Kore',
+            speed: parsed.speechSpeed || 1.0,
+            emotion: 'natural',
+            autoPlayReplies: true,
+          },
+        };
+      }
+      return {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 64,
+        thinkingLevel: 'HIGH',
+        enableWebSearch: false,
+        speechVoice: 'Kore',
+        speechSpeed: 1.0,
+        enforceIndonesian: true,
+        voiceSettings: {
+          provider: 'gemini',
+          voiceId: 'Kore',
+          speed: 1.0,
+          emotion: 'natural',
+          autoPlayReplies: true,
+        },
+      };
     } catch {
       return {
         temperature: 0.7,
@@ -81,9 +109,54 @@ export default function App() {
         enableWebSearch: false,
         speechVoice: 'Kore',
         speechSpeed: 1.0,
+        enforceIndonesian: true,
+        voiceSettings: {
+          provider: 'gemini',
+          voiceId: 'Kore',
+          speed: 1.0,
+          emotion: 'natural',
+          autoPlayReplies: true,
+        },
       };
     }
   });
+
+  const [isSpeakingAudio, setIsSpeakingAudio] = React.useState(false);
+
+  // Track global audio speaking state
+  React.useEffect(() => {
+    const unsub = audioService.onStateChange((state) => {
+      setIsSpeakingAudio(state.isSpeaking);
+    });
+    return unsub;
+  }, []);
+
+  const handleToggleAutoPlaySpeech = () => {
+    setGenerationSettings((prev) => {
+      const currentVoice = prev.voiceSettings || {
+        provider: 'gemini',
+        voiceId: prev.speechVoice || 'Kore',
+        speed: prev.speechSpeed || 1.0,
+        emotion: 'natural',
+        autoPlayReplies: true,
+      };
+      const willBeActive = !currentVoice.autoPlayReplies;
+      const updated = {
+        ...prev,
+        voiceSettings: {
+          ...currentVoice,
+          autoPlayReplies: willBeActive,
+        },
+      };
+      showToast(
+        willBeActive
+          ? 'Mode Baca Suara: AKTIF (AI otomatis membaca balasan)'
+          : 'Mode Baca Suara: NONAKTIF',
+        'info'
+      );
+      return updated;
+    });
+  };
 
   // Sessions & Messages
   const [sessions, setSessions] = React.useState<ChatSession[]>(() => {
@@ -98,7 +171,7 @@ export default function App() {
     }
     const initialSession: ChatSession = {
       id: Math.random().toString(36).substring(7),
-      title: 'New Conversation',
+      title: 'Percakapan Baru',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messages: [],
@@ -119,6 +192,7 @@ export default function App() {
   // UI state
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = React.useState(false);
+  const [liveVoiceOpen, setLiveVoiceOpen] = React.useState(false);
   const [settingsTab, setSettingsTab] = React.useState('endpoints');
   const [serverOnline, setServerOnline] = React.useState(true);
   const [latencyMs, setLatencyMs] = React.useState(24);
@@ -164,6 +238,17 @@ export default function App() {
       console.warn('Failed to save apiKeys:', e);
     }
   }, [apiKeys]);
+
+  // Persist custom prompt & system instruction
+  React.useEffect(() => {
+    try {
+      if (customSystemInstruction) {
+        localStorage.setItem(STORAGE_KEY_CUSTOM_INSTRUCTION, customSystemInstruction);
+      }
+    } catch (e) {
+      console.warn('Failed to save customSystemInstruction:', e);
+    }
+  }, [customSystemInstruction]);
 
   // Toast Helper
   const showToast = (title: string, type: 'success' | 'error' | 'info' = 'info', description?: string) => {
@@ -226,7 +311,7 @@ export default function App() {
   const handleNewChat = () => {
     const newSession: ChatSession = {
       id: Math.random().toString(36).substring(7),
-      title: 'New Conversation',
+      title: 'Percakapan Baru',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messages: [],
@@ -245,7 +330,7 @@ export default function App() {
     if (remaining.length === 0) {
       const freshSession: ChatSession = {
         id: Math.random().toString(36).substring(7),
-        title: 'New Conversation',
+        title: 'Percakapan Baru',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         messages: [],
@@ -260,14 +345,14 @@ export default function App() {
         setActiveSessionId(remaining[0].id);
       }
     }
-    showToast('Conversation deleted', 'info');
+    showToast('Percakapan dihapus', 'info');
   };
 
   const handleRenameSession = (id: string, newTitle: string) => {
     setSessions((prev) =>
       prev.map((s) => (s.id === id ? { ...s, title: newTitle, updatedAt: Date.now() } : s))
     );
-    showToast('Conversation renamed', 'success');
+    showToast('Judul obrolan diperbarui', 'success');
   };
 
   const handleTogglePin = (id: string) => {
@@ -405,6 +490,27 @@ export default function App() {
             : s
         )
       );
+
+      // Auto-Read Voice: Automatically speak the AI response if enabled
+      const autoReadEnabled = generationSettings.voiceSettings?.autoPlayReplies ?? true;
+      if (autoReadEnabled && response.text) {
+        setTimeout(() => {
+          audioService
+            .speakMessage(
+              response.text,
+              {
+                provider: generationSettings.voiceSettings?.provider || 'gemini',
+                voice: generationSettings.voiceSettings?.voiceId || generationSettings.speechVoice || 'Kore',
+                speed: generationSettings.voiceSettings?.speed || generationSettings.speechSpeed || 1.0,
+                emotion: generationSettings.voiceSettings?.emotion || 'natural',
+                apiKeys,
+              },
+              assistantMessage.id,
+              endpointConfig
+            )
+            .catch((err) => console.warn('Auto-read audio error:', err));
+        }, 150);
+      }
     } catch (err: any) {
       console.error('Inference error:', err);
       const errorMessage: Message = {
@@ -512,6 +618,75 @@ export default function App() {
       });
   };
 
+  // Real-Time Live Voice Conversation Handler
+  const handleLiveVoiceSendMessage = async (userText: string): Promise<string> => {
+    if (!userText.trim()) return '';
+
+    const userMessage: Message = {
+      id: Math.random().toString(36).substring(7),
+      role: 'user',
+      content: userText.trim(),
+      timestamp: Date.now(),
+    };
+
+    const isFirstMessage = activeMessages.length === 0;
+    const sessionTitle = isFirstMessage
+      ? userText.slice(0, 32) + (userText.length > 32 ? '...' : '')
+      : activeSession.title;
+
+    const updatedMessages = [...activeMessages, userMessage];
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId
+          ? {
+              ...s,
+              title: sessionTitle,
+              messages: updatedMessages,
+              updatedAt: Date.now(),
+            }
+          : s
+      )
+    );
+
+    const payload = {
+      model: selectedModel.id,
+      messages: updatedMessages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+      systemInstruction: (customSystemInstruction || selectedPersona.prompt) + "\nInstruksi Tambahan Mode Suara: Anda sedang merespons secara langsung melalui suara percakapan interaktif. Berikan jawaban dalam Bahasa Indonesia yang santun, alami, ringkas, mudah dipahami ketika diucapkan, dan tanpa format tabel markdown rumit atau karakter khusus.",
+      temperature: generationSettings.temperature,
+      topP: generationSettings.topP,
+      thinkingLevel: 'MINIMAL' as const,
+      enableWebSearch: false,
+      apiKeys,
+    };
+
+    const response = await apiService.sendChatMessage(payload, endpointConfig);
+
+    const assistantMessage: Message = {
+      id: Math.random().toString(36).substring(7),
+      role: 'assistant',
+      content: response.text,
+      timestamp: Date.now(),
+      modelUsed: response.model || selectedModel.name,
+    };
+
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId
+          ? {
+              ...s,
+              messages: [...updatedMessages, assistantMessage],
+              updatedAt: Date.now(),
+            }
+          : s
+      )
+    );
+
+    return response.text;
+  };
+
   const handleCopyText = (text: string) => {
     navigator.clipboard.writeText(text);
   };
@@ -571,10 +746,15 @@ export default function App() {
           if (tab) setSettingsTab(tab);
           setSettingsModalOpen(true);
         }}
+        onOpenLiveVoice={() => setLiveVoiceOpen(true)}
         onNewChat={handleNewChat}
         serverOnline={serverOnline}
         latencyMs={latencyMs}
         hasApiKey={hasApiKey}
+        autoPlayReplies={generationSettings.voiceSettings?.autoPlayReplies ?? true}
+        onToggleAutoPlayReplies={handleToggleAutoPlaySpeech}
+        isSpeakingAudio={isSpeakingAudio}
+        onStopAudio={() => audioService.stop()}
       />
 
       {/* Workspace Body (Sidebar + Chat Area + Input) */}
@@ -606,6 +786,8 @@ export default function App() {
             messages={activeMessages}
             isLoading={isLoading}
             activeModel={selectedModel}
+            voiceSettings={generationSettings.voiceSettings}
+            apiKeys={apiKeys}
             onSelectPromptPreset={handleSelectPreset}
             onRegenerateMessage={handleRegenerateMessage}
             onCopyText={handleCopyText}
@@ -627,10 +809,37 @@ export default function App() {
             isLocating={isLocating}
             enableWebSearch={enableWebSearch}
             onToggleWebSearch={() => setEnableWebSearch((prev) => !prev)}
+            autoPlaySpeech={generationSettings.voiceSettings?.autoPlayReplies ?? true}
+            onToggleAutoPlaySpeech={handleToggleAutoPlaySpeech}
             onShowToast={showToast}
           />
         </main>
       </div>
+
+      {/* Real-Time Live Neural Voice Overlay (Gemini Live / OpenAI / ElevenLabs) */}
+      <LiveVoiceOverlay
+        isOpen={liveVoiceOpen}
+        onClose={() => setLiveVoiceOpen(false)}
+        activeModel={selectedModel}
+        apiKeys={apiKeys}
+        voiceSettings={generationSettings.voiceSettings || {
+          provider: 'gemini',
+          voiceId: generationSettings.speechVoice || 'Kore',
+          speed: generationSettings.speechSpeed || 1.0,
+          emotion: 'natural',
+          autoPlayReplies: false,
+        }}
+        onUpdateVoiceSettings={(vSettings) =>
+          setGenerationSettings((prev) => ({
+            ...prev,
+            speechVoice: vSettings.voiceId,
+            speechSpeed: vSettings.speed,
+            voiceSettings: vSettings,
+          }))
+        }
+        onSendMessage={handleLiveVoiceSendMessage}
+        onShowToast={showToast}
+      />
 
       {/* Developer & Architecture Settings Modal */}
       <SettingsModal

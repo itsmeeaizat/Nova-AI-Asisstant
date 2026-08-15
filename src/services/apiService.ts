@@ -195,18 +195,28 @@ class ApiService {
 
   public async generateSpeech(
     text: string,
-    voice: string = 'Kore',
+    options?: {
+      voice?: string;
+      provider?: 'gemini' | 'openai' | 'elevenlabs';
+      speed?: number;
+      emotion?: string;
+      apiKeys?: any;
+    } | string,
     config: EndpointConfig = DEFAULT_ENDPOINT_CONFIG
-  ): Promise<string> {
+  ): Promise<{ audioBase64: string; mimeType?: string; provider?: string; voiceUsed?: string }> {
     const url = `${config.baseUrl}${config.speechEndpoint}`;
     const logId = Math.random().toString(36).substring(7);
     const startTime = performance.now();
+
+    const payload = typeof options === 'string'
+      ? { text, voice: options }
+      : { text, ...options };
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice }),
+        body: JSON.stringify(payload),
       });
 
       const latencyMs = Math.round(performance.now() - startTime);
@@ -217,7 +227,7 @@ class ApiService {
 
       const resData = await response.json();
       if (!resData.success || !resData.data?.audioBase64) {
-        throw new Error(resData.error || 'Speech generation failed');
+        throw new Error(resData.error || 'Neural speech generation failed');
       }
 
       this.addLog({
@@ -227,10 +237,14 @@ class ApiService {
         method: 'POST',
         status: response.status,
         durationMs: latencyMs,
-        responsePayload: { audioLength: resData.data.audioBase64.length },
+        responsePayload: {
+          audioLength: resData.data.audioBase64.length,
+          provider: resData.data.provider,
+          voiceUsed: resData.data.voiceUsed,
+        },
       });
 
-      return resData.data.audioBase64;
+      return resData.data;
     } catch (err: any) {
       const latencyMs = Math.round(performance.now() - startTime);
       this.addLog({

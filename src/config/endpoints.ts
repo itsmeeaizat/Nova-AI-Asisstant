@@ -54,6 +54,7 @@ export interface ApiKeysConfig {
   deepseekApiKey?: string;
   groqApiKey?: string;
   openrouterApiKey?: string;
+  elevenlabsApiKey?: string;
   customApiKey?: string;
   customBaseUrl?: string;
   customModelName?: string;
@@ -71,9 +72,236 @@ export const RAW_DEVELOPER_API_KEYS: ApiKeysConfig = {
   deepseekApiKey: '',
   groqApiKey: '',
   openrouterApiKey: '',
+  elevenlabsApiKey: '',
   customApiKey: '',
   customBaseUrl: 'http://localhost:11434/v1',
   customModelName: 'llama3.2',
+};
+
+export interface VoiceModelOption {
+  id: string;
+  name: string;
+  provider: 'gemini' | 'openai' | 'elevenlabs';
+  providerName: string;
+  gender: 'female' | 'male' | 'neutral';
+  tone: string;
+  description: string;
+  badge: string;
+  samplePhrase: string;
+}
+
+export const AVAILABLE_VOICES: VoiceModelOption[] = [
+  // 1. GOOGLE GEMINI LIVE NEURAL VOICES (gemini-3.1-flash-tts-preview)
+  {
+    id: 'Kore',
+    name: 'Kore (Gemini Live)',
+    provider: 'gemini',
+    providerName: 'Google Gemini Live',
+    gender: 'female',
+    tone: 'Warm, natural, clear, empathetic',
+    description: 'Flagship Google neural voice with conversational prosody, natural breath pauses, and contextual pacing.',
+    badge: 'Gemini Live SOTA',
+    samplePhrase: 'Halo! Saya siap membantu Anda mendiskusikan ide baru atau menganalisis tugas apa pun hari ini.',
+  },
+  {
+    id: 'Zephyr',
+    name: 'Zephyr (Gemini Live)',
+    provider: 'gemini',
+    providerName: 'Google Gemini Live',
+    gender: 'female',
+    tone: 'Breezy, friendly, high clarity',
+    description: 'Upbeat and articulate voice optimized for real-time dialogue and clear explanations.',
+    badge: 'Expressive',
+    samplePhrase: 'Saya dapat memandu Anda melalui seluruh proses langkah demi langkah dengan sangat jelas.',
+  },
+  {
+    id: 'Puck',
+    name: 'Puck (Gemini Live)',
+    provider: 'gemini',
+    providerName: 'Google Gemini Live',
+    gender: 'male',
+    tone: 'Playful, dynamic, energetic',
+    description: 'Vibrant male voice with dynamic emotional inflection, great for interactive brainstorming.',
+    badge: 'Dynamic',
+    samplePhrase: 'Mari kita mulai dan ciptakan sesuatu yang luar biasa bersama-sama!',
+  },
+  {
+    id: 'Fenrir',
+    name: 'Fenrir (Gemini Live)',
+    provider: 'gemini',
+    providerName: 'Google Gemini Live',
+    gender: 'male',
+    tone: 'Deep, authoritative, reassuring',
+    description: 'Rich resonant timbre ideal for lectures, technical briefings, and strategic summaries.',
+    badge: 'Deep Resonance',
+    samplePhrase: 'Berikut adalah ringkasan eksekutif dan pertimbangan arsitektur sistem.',
+  },
+  {
+    id: 'Charon',
+    name: 'Charon (Gemini Live)',
+    provider: 'gemini',
+    providerName: 'Google Gemini Live',
+    gender: 'male',
+    tone: 'Calm, thoughtful, grounded',
+    description: 'Relaxed pacing and introspective tone, optimal for deep reading and reflection.',
+    badge: 'Calm',
+    samplePhrase: 'Mari kita luangkan waktu untuk menganalisis bagaimana setiap komponen saling terhubung.',
+  },
+
+  // 2. OPENAI AUDIO API (TTS-1-HD / REALTIME)
+  {
+    id: 'alloy',
+    name: 'Alloy (OpenAI)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'neutral',
+    tone: 'Balanced, conversational, warm',
+    description: 'Versatile and friendly neutral voice with human-like breathing and natural cadence.',
+    badge: 'OpenAI Flagship',
+    samplePhrase: 'Saya dapat membantu Anda menguraikan hal ini menjadi langkah-langkah praktis yang mudah.',
+  },
+  {
+    id: 'echo',
+    name: 'Echo (OpenAI)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'male',
+    tone: 'Warm, rounded, gentle',
+    description: 'Comfortable, human vocal presence with subtle emotional warmth.',
+    badge: 'Warm Male',
+    samplePhrase: 'Mari kita telusuri gagasan itu lebih dalam dan lihat potensinya.',
+  },
+  {
+    id: 'shimmer',
+    name: 'Shimmer (OpenAI)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'female',
+    tone: 'Bright, expressive, polished',
+    description: 'High-frequency brilliance with emotional expressiveness and clear diction.',
+    badge: 'Expressive',
+    samplePhrase: 'Pertanyaan yang sangat bagus! Mari kita pelajari poin-poin utamanya bersama.',
+  },
+  {
+    id: 'ash',
+    name: 'Ash (OpenAI Realtime)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'male',
+    tone: 'Casual, conversational, relaxed',
+    description: 'OpenAI Realtime audio voice designed for effortless casual conversation and voice notes.',
+    badge: 'Realtime',
+    samplePhrase: 'Halo! Saya siap kapan pun Anda ingin mengobrol atau menyelesaikan tugas.',
+  },
+  {
+    id: 'ballad',
+    name: 'Ballad (OpenAI Realtime)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'male',
+    tone: 'Smooth, storytelling, deep warmth',
+    description: 'Storyteller timbre with resonant emotional contour.',
+    badge: 'Storyteller',
+    samplePhrase: 'Dalam dunia teknologi dan desain, kesederhanaan adalah bentuk kecanggihan tertinggi.',
+  },
+  {
+    id: 'coral',
+    name: 'Coral (OpenAI Realtime)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'female',
+    tone: 'Charming, friendly, lively',
+    description: 'Warm and inviting voice with authentic conversational intonation.',
+    badge: 'Friendly',
+    samplePhrase: 'Senang bisa membantu Anda! Ada yang ingin kita diskusikan atau bangun selanjutnya?',
+  },
+  {
+    id: 'sage',
+    name: 'Sage (OpenAI Realtime)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'female',
+    tone: 'Thoughtful, composed, professional',
+    description: 'Polished consulting tone with measured cadence and clear pronunciation.',
+    badge: 'Insightful',
+    samplePhrase: 'Meninjau kembali dasar-dasarnya secara cermat akan selalu menunjukkan arah terbaik.',
+  },
+  {
+    id: 'verse',
+    name: 'Verse (OpenAI Realtime)',
+    provider: 'openai',
+    providerName: 'OpenAI Audio API',
+    gender: 'neutral',
+    tone: 'Dynamic, modern, crisp',
+    description: 'Contemporary neutral voice engineered for real-time collaborative dialogue.',
+    badge: 'Modern',
+    samplePhrase: 'Mari kita sinkronkan rencana dan mulai eksekusi tahap berikutnya.',
+  },
+
+  // 3. ELEVENLABS ULTRA-REALISTIC AI VOICE ENGINE
+  {
+    id: '21m00Tcm4TlvDq8ikWAM', // Rachel
+    name: 'Rachel (ElevenLabs)',
+    provider: 'elevenlabs',
+    providerName: 'ElevenLabs Engine',
+    gender: 'female',
+    tone: 'Ultra-realistic, calm, authentic American',
+    description: 'The global benchmark for neural voice realism. Indistinguishable from human speech with natural breath and micro-inflections.',
+    badge: 'ElevenLabs Top',
+    samplePhrase: 'Setiap kalimat diucapkan dengan ritme alami, jeda napas yang hidup, dan kehangatan nyata.',
+  },
+  {
+    id: 'pNInz6obpgDQGcFmaJgB', // Adam
+    name: 'Adam (ElevenLabs)',
+    provider: 'elevenlabs',
+    providerName: 'ElevenLabs Engine',
+    gender: 'male',
+    tone: 'Deep, engaging, conversational narration',
+    description: 'Rich, natural male voice famous for high-end audiobooks and lifelike conversational AI.',
+    badge: 'Deep Natural',
+    samplePhrase: 'Suara ini terdengar sangat hidup, persis seperti percakapan langsung antar manusia.',
+  },
+  {
+    id: 'ErXwobaYiN019PkySvjV', // Antoni
+    name: 'Antoni (ElevenLabs)',
+    provider: 'elevenlabs',
+    providerName: 'ElevenLabs Engine',
+    gender: 'male',
+    tone: 'Articulate, friendly, crisp European-American',
+    description: 'Balanced, pleasant voice ideal for voice messages, smart assistants, and podcasting.',
+    badge: 'Articulate',
+    samplePhrase: 'Saya hadir untuk membantu Anda beraktivitas dengan cepat, tepat, dan menyenangkan.',
+  },
+  {
+    id: 'EXAVITQu4vr4xnSDxMaL', // Bella
+    name: 'Bella (ElevenLabs)',
+    provider: 'elevenlabs',
+    providerName: 'ElevenLabs Engine',
+    gender: 'female',
+    tone: 'Soft, intimate, emotional depth',
+    description: 'Expressive female voice capable of subtle emotional changes, whispering, and gentle humor.',
+    badge: 'Emotional',
+    samplePhrase: 'Rasanya seperti sedang berbincang santai dari hati ke hati dengan teman dekat.',
+  },
+  {
+    id: 'TxGEqnHWrfWFTfGW9XjX', // Josh
+    name: 'Josh (ElevenLabs)',
+    provider: 'elevenlabs',
+    providerName: 'ElevenLabs Engine',
+    gender: 'male',
+    tone: 'Youthful, casual, natural American guy',
+    description: 'Great for casual banter, WhatsApp-style voice notes, and modern conversational bots.',
+    badge: 'Casual Pro',
+    samplePhrase: 'Halo kawan! Ada yang butuh bantuan untuk proyek atau tugas hari ini?',
+  },
+];
+
+export const DEFAULT_VOICE_SETTINGS = {
+  provider: 'gemini' as const,
+  voiceId: 'Kore',
+  speed: 1.0,
+  emotion: 'natural' as const,
+  autoPlayReplies: false,
 };
 
 export interface ModelOption {
@@ -326,57 +554,124 @@ export const SYSTEM_PERSONAS: SystemPersona[] = [
   {
     id: 'general',
     name: 'Nova Core',
-    role: 'Balanced General Assistant',
+    role: 'Asisten Serba Bisa',
     icon: 'Sparkles',
-    prompt: 'You are Nova, an exceptionally intelligent, helpful, articulate, and empathetic AI assistant. Provide concise, well-structured, modern markdown answers. Always format code in cleanly highlighted code blocks with language tags.',
+    prompt: 'Anda adalah Nova, asisten AI yang sangat cerdas, ramah, artikulatif, dan berwawasan luas. Selalu gunakan Bahasa Indonesia sebagai bahasa utama/default dalam merespons seluruh pertanyaan pengguna secara jelas, alami, sopan, dan terstruktur rapi dengan markdown modern. Format kode program selalu dalam blok kode ber-syntax highlight bersih dengan tag bahasa yang tepat.',
   },
   {
     id: 'developer',
     name: 'Senior Architect',
-    role: 'Full-Stack & Systems Expert',
+    role: 'Pakar Full-Stack & Sistem',
     icon: 'Code',
-    prompt: 'You are a Principal Software Architect and Senior Full-Stack Engineer. Provide robust, bug-free TypeScript/Python/Rust code, state design patterns, security best practices, and performance considerations.',
+    prompt: 'Anda adalah Principal Software Architect dan Senior Full-Stack Engineer. Berikan analisis mendalam, arsitektur sistem modern, serta kode TypeScript/Python/Rust yang kokoh, aman, bebas bug, dan berkinerja tinggi. Berikan penjelasan dalam Bahasa Indonesia yang profesional, jelas, dan solutif.',
   },
   {
     id: 'creative',
     name: 'Creative Director',
-    role: 'Design & Copywriting Specialist',
+    role: 'Pakar Desain & Copywriting',
     icon: 'Palette',
-    prompt: 'You are a world-class creative director and copywriter. Deliver captivating prose, refined UX microcopy, imaginative storytelling, and aesthetic design critiques.',
+    prompt: 'Anda adalah Creative Director dan pakar Copywriting kelas dunia. Hasilkan ide kreatif, narasi menarik, mikro-copy UI/UX yang memikat, dan ulasan desain estetis dalam Bahasa Indonesia yang ekspresif, elegan, dan berdampak kuat.',
   },
   {
     id: 'analyst',
     name: 'Data Strategist',
-    role: 'Executive Summary & Logic',
+    role: 'Ringkasan Eksekutif & Logika',
     icon: 'BarChart3',
-    prompt: 'You are an executive business analyst and research strategist. Synthesize data, present bulleted executive summaries, highlight key takeaways, and outline actionable next steps with high signal-to-noise ratio.',
+    prompt: 'Anda adalah Executive Business Analyst dan Data Strategist. Sintesis data dan dokumen, sajikan ringkasan eksekutif berpoin, sorot wawasan kunci, dan susun rekomendasi aksi konkret dengan rasio sinyal-ke-kebisingan tinggi dalam Bahasa Indonesia yang tajam.',
   },
 ];
 
 export const PROMPT_PRESETS = [
   {
-    title: 'Code Audit & Refactor',
-    description: 'Analyze code for bottlenecks, type safety, and clean architecture',
+    title: 'Audit & Refaktor Kode',
+    description: 'Analisis kode untuk optimasi performa, type safety, dan clean architecture',
     icon: 'Terminal',
-    prompt: 'Please review and refactor this code for optimal performance, null safety, and clean modern architecture:',
+    prompt: 'Tolong tinjau dan refaktor kode berikut untuk performa maksimal, keamanan tipe data (null-safety), dan arsitektur yang bersih:',
   },
   {
-    title: 'Multimodal Vision QA',
-    description: 'Upload an image or diagram to extract insights or transcribe UI',
+    title: 'Analisis Gambar & Vision Multimodal',
+    description: 'Ekstrak informasi, baca teks OCR, dan bedah hierarki visual dari gambar',
     icon: 'Image',
-    prompt: 'Analyze this image in detail. Extract any text, explain UI layout hierarchies, and suggest UX improvements.',
+    prompt: 'Analisis gambar/dokumen ini secara mendalam. Ekstrak teks penting, jelaskan tata letak atau diagramnya, dan berikan rekomendasi tindak lanjut.',
   },
   {
-    title: 'Explain Complex Topic',
-    description: 'Break down complex algorithms or systems simply with analogies',
+    title: 'Penjelasan Konsep & Algoritma',
+    description: 'Pahami sistem kompleks atau arsitektur komputasi dengan analogi mudah',
     icon: 'BookOpen',
-    prompt: 'Explain the internal architecture and working principles of distributed consensus algorithms like Raft in simple terms with analogies.',
+    prompt: 'Jelaskan konsep arsitektur sistem terdistribusi dan algoritma konsensus seperti Raft secara sederhana dengan analogi yang mudah dipahami dalam Bahasa Indonesia.',
   },
   {
-    title: 'Executive Briefing',
-    description: 'Draft a high-impact briefing document with key metrics',
+    title: 'Ringkasan Eksekutif Strategis',
+    description: 'Susun laporan atau ringkasan bisnis berbobot tinggi beserta metrik kunci',
     icon: 'FileText',
-    prompt: 'Draft an executive briefing summarizing modern edge AI deployment strategies, cost-latency trade-offs, and recommended security guardrails.',
+    prompt: 'Buatlah ringkasan eksekutif komprehensif mengenai strategi penerapan Edge AI & Large Audio Models, perbandingan biaya vs latensi, dan rekomendasi implementasi praktis.',
   },
 ];
+
+export const STRICT_INDONESIAN_PROMPT_RULE = `[ATURAN WAJIB BAHASA INDONESIA]:
+1. Anda HARUS SELALU menggunakan BAHASA INDONESIA dalam seluruh jawaban, penjelasan, pemecahan masalah, dan sapaan.
+2. DILARANG menggunakan bahasa Inggris sebagai bahasa utama untuk sapaan atau percakapan umum.
+3. Selalu berikan respon yang jelas, alami, sopan, dan terstruktur rapi dengan format Markdown modern.
+4. Istilah teknis khusus atau kode program tetap dipertahankan dengan penjelasan berbahasa Indonesia.`;
+
+export interface CustomPromptTemplate {
+  id: string;
+  name: string;
+  badge: string;
+  category: string;
+  description: string;
+  prompt: string;
+}
+
+export const CUSTOM_PROMPT_TEMPLATES: CustomPromptTemplate[] = [
+  {
+    id: 'id-standard',
+    name: 'Bahasa Indonesia Standar & Ramah',
+    badge: 'Rekomendasi',
+    category: 'Umum',
+    description: 'Respon berbahasa Indonesia yang jelas, sopan, terstruktur rapi, dan mudah dipahami.',
+    prompt: `Anda adalah Nova, asisten AI cerdas dan ramah. Gunakan SELALU Bahasa Indonesia secara penuh dan baku namun tetap bersahabat dalam semua percakapan dan solusi yang Anda berikan. Sajikan jawaban dengan format Markdown yang rapi.`,
+  },
+  {
+    id: 'id-developer',
+    name: 'Pakar Full-Stack & Clean Code',
+    badge: 'Teknis',
+    category: 'Pemrograman',
+    description: 'Solusi arsitektur software, clean code TypeScript/Python, dan penjelasan teknis mendalam berbahasa Indonesia.',
+    prompt: `Anda adalah Principal Software Engineer dan Solution Architect kelas dunia. Berikan solusi teknis, contoh kode (TypeScript/Python/Go/Rust) yang modular, aman, dan type-safe, serta jelaskan arsitektur dan trade-off sistem secara mendalam dalam Bahasa Indonesia yang lugas dan solutif.`,
+  },
+  {
+    id: 'id-analyst',
+    name: 'Analis Bisnis & Riset Eksekutif',
+    badge: 'Bisnis',
+    category: 'Analisis & Data',
+    description: 'Ringkasan eksekutif berpoin, analisis SWOT, dan rekomendasi aksi nyata berbobot tinggi.',
+    prompt: `Anda adalah Executive Business Consultant dan Data Strategist. Berikan ringkasan eksekutif berpoin, telaah risiko dan peluang, serta susun rencana aksi konkret (actionable steps) dengan rasio sinyal-ke-kebisingan tinggi dalam Bahasa Indonesia formal dan profesional.`,
+  },
+  {
+    id: 'id-educator',
+    name: 'Tutor & Edukator Interaktif',
+    badge: 'Edukasi',
+    category: 'Pendidikan',
+    description: 'Menjelaskan materi atau konsep rumit secara bertahap dengan analogi sederhana.',
+    prompt: `Anda adalah dosen dan mentor edukasi yang sabar dan komunikatif. Jelaskan konsep, rumus, atau teori yang kompleks menggunakan analogi kehidupan nyata dan langkah-langkah bertahap dalam Bahasa Indonesia agar mudah dimengerti oleh siapa saja.`,
+  },
+  {
+    id: 'id-creative',
+    name: 'Copywriter & Kreator Konten',
+    badge: 'Kreatif',
+    category: 'Konten',
+    description: 'Narasi memikat, copywriting media sosial, naskah presentasi, dan storytelling engaging.',
+    prompt: `Anda adalah Creative Director dan pakar Copywriting persuasif. Hasilkan ide konten viral, naskah video/podcast, email marketing, atau artikel blog dalam Bahasa Indonesia yang ekspresif, berdaya pikat tinggi, dan enak dibaca.`,
+  },
+  {
+    id: 'id-concise',
+    name: 'Super Singkat & To-The-Point',
+    badge: 'Efisiensi',
+    category: 'Produktivitas',
+    description: 'Jawaban langsung ke inti persoalan tanpa pembukaan atau penutup panjang.',
+    prompt: `Anda adalah asisten super efisien. Berikan jawaban langsung ke inti masalah (to-the-point) dalam Bahasa Indonesia, tanpa basa-basi pembuka atau penutup yang tidak perlu. Gunakan format poin singkat jika relevan.`,
+  },
+];
+
 

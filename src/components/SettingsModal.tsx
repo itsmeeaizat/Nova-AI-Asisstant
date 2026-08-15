@@ -24,11 +24,27 @@ import {
   ExternalLink,
   Sparkles,
   Server,
-  FileCode
+  FileCode,
+  Languages,
+  Wand2,
+  RotateCcw,
+  CheckCircle2,
+  Info
 } from 'lucide-react';
-import { ApiKeysConfig, EndpointConfig, SystemPersona, SYSTEM_PERSONAS, RAW_DEVELOPER_API_KEYS } from '../config/endpoints';
-import { ApiLogEntry, GenerationSettings } from '../types/chat';
+import { 
+  ApiKeysConfig, 
+  EndpointConfig, 
+  SystemPersona, 
+  SYSTEM_PERSONAS, 
+  RAW_DEVELOPER_API_KEYS, 
+  AVAILABLE_VOICES, 
+  DEFAULT_VOICE_SETTINGS,
+  CUSTOM_PROMPT_TEMPLATES,
+  STRICT_INDONESIAN_PROMPT_RULE
+} from '../config/endpoints';
+import { ApiLogEntry, GenerationSettings, VoiceSettings } from '../types/chat';
 import { apiService } from '../services/apiService';
+import { audioService } from '../services/audioService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -74,6 +90,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [copiedLogs, setCopiedLogs] = React.useState(false);
   const [copiedEnv, setCopiedEnv] = React.useState(false);
   const [visibleKeys, setVisibleKeys] = React.useState<Record<string, boolean>>({});
+  const [testingVoiceId, setTestingVoiceId] = React.useState<string | null>(null);
+
+  const activeVoiceSettings: VoiceSettings = generationSettings.voiceSettings || {
+    provider: (generationSettings.speechVoice?.startsWith('21m') ? 'elevenlabs' : ['alloy', 'echo', 'shimmer', 'ash'].includes(generationSettings.speechVoice || '') ? 'openai' : 'gemini'),
+    voiceId: generationSettings.speechVoice || 'Kore',
+    speed: generationSettings.speechSpeed || 1.0,
+    emotion: 'natural',
+    autoPlayReplies: false,
+  };
+
+  const handleTestVoice = async (voice: typeof AVAILABLE_VOICES[0]) => {
+    if (testingVoiceId === voice.id && audioService.isCurrentlySpeaking()) {
+      audioService.stop();
+      setTestingVoiceId(null);
+      return;
+    }
+
+    setTestingVoiceId(voice.id);
+    try {
+      await audioService.speakMessage(
+        voice.samplePhrase,
+        {
+          provider: voice.provider,
+          voice: voice.id,
+          speed: activeVoiceSettings.speed,
+          emotion: activeVoiceSettings.emotion,
+          apiKeys,
+        },
+        `test-${voice.id}`
+      );
+    } catch (err: any) {
+      onShowToast(`Voice preview error: ${err.message || 'Failed to play sample'}`, 'error');
+    } finally {
+      setTestingVoiceId(null);
+    }
+  };
 
   React.useEffect(() => {
     if (initialTab) {
@@ -177,18 +229,26 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
             label="API Keys & Providers"
           />
           <TabButton
+            id="tab-btn-voice"
+            active={activeTab === 'voice'}
+            onClick={() => setActiveTab('voice')}
+            icon={<Volume2 className="w-4 h-4" />}
+            label="Neural Voice Engine"
+          />
+          <TabButton
             id="tab-btn-parameters"
             active={activeTab === 'parameters'}
             onClick={() => setActiveTab('parameters')}
             icon={<Sliders className="w-4 h-4" />}
-            label="Inference & Voice"
+            label="Model Inference & Reasoning"
           />
           <TabButton
             id="tab-btn-persona"
             active={activeTab === 'persona'}
             onClick={() => setActiveTab('persona')}
-            icon={<Shield className="w-4 h-4" />}
-            label="Personas & Instructions"
+            icon={<Languages className="w-4 h-4 text-emerald-400" />}
+            label="Prompt Kustom & Bahasa Indonesia"
+            badge="Wajib ID"
           />
           <TabButton
             id="tab-btn-endpoints"
@@ -323,7 +383,23 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
                   placeholder="sk-..."
                 />
 
-                {/* 6. Groq / OpenRouter */}
+                {/* 6. ElevenLabs Ultra-Realistic Voice Engine */}
+                <ApiKeyInputCard
+                  id="input-key-elevenlabs"
+                  title="ElevenLabs (Ultra-Realistic AI Voice Engine)"
+                  badge="ElevenLabs"
+                  badgeColor="bg-amber-950/70 text-amber-300 border-amber-800/50"
+                  envVarName="ELEVENLABS_API_KEY"
+                  value={apiKeys.elevenlabsApiKey || ''}
+                  onChange={(val) => onUpdateApiKeys({ ...apiKeys, elevenlabsApiKey: val })}
+                  isVisible={Boolean(visibleKeys['elevenlabs'])}
+                  onToggleVisible={() => toggleKeyVisibility('elevenlabs')}
+                  portalUrl="https://elevenlabs.io/app/speech-synthesis"
+                  portalLabel="ElevenLabs Console"
+                  placeholder="xi-api-key-..."
+                />
+
+                {/* 7. Groq / OpenRouter */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <ApiKeyInputCard
                     id="input-key-groq"
@@ -395,7 +471,269 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
             </div>
           )}
 
-          {/* TAB: INFERENCE & VOICE PARAMETERS */}
+          {/* TAB: NEURAL VOICE ENGINE (GEMINI LIVE, OPENAI, ELEVENLABS) */}
+          {activeTab === 'voice' && (
+            <div className="space-y-6">
+              {/* Architecture Info Banner */}
+              <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-xs font-semibold text-neutral-100">
+                    Real-Time Neural Audio Architecture (Gemini Live & Large Audio Models)
+                  </h3>
+                </div>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Unlike outdated browser-based robotic TTS, Real-Time Neural Audio uses Large Audio Models to generate human-like speech with natural cadence, emotional intonation, and realistic breath pauses.
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[10px] font-medium">
+                    ✨ Gemini Live (Kore, Zephyr, Puck, Fenrir)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-medium">
+                    🎙️ OpenAI Audio API (Alloy, Echo, Shimmer, Ash)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] font-medium">
+                    🌟 ElevenLabs SOTA Voice Engine
+                  </span>
+                </div>
+              </div>
+
+              {/* Provider Quick Toggle */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block">
+                  Select Primary Voice Provider
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'gemini' as const, name: 'Google Gemini Live', badge: 'Flagship Built-in', icon: '✨' },
+                    { id: 'openai' as const, name: 'OpenAI Audio API', badge: 'TTS-1-HD & Realtime', icon: '🎙️' },
+                    { id: 'elevenlabs' as const, name: 'ElevenLabs Engine', badge: 'Ultra-Realistic', icon: '🌟' },
+                  ].map((prov) => {
+                    const isSelected = activeVoiceSettings.provider === prov.id;
+                    return (
+                      <button
+                        key={prov.id}
+                        type="button"
+                        onClick={() => {
+                          const matchingVoices = AVAILABLE_VOICES.filter(v => v.provider === prov.id);
+                          const firstVoice = matchingVoices[0]?.id || 'Kore';
+                          onUpdateGenerationSettings({
+                            ...generationSettings,
+                            speechVoice: firstVoice,
+                            voiceSettings: {
+                              ...activeVoiceSettings,
+                              provider: prov.id,
+                              voiceId: firstVoice,
+                            },
+                          });
+                        }}
+                        className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-neutral-850 border-indigo-500/60 shadow-md text-white'
+                            : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-neutral-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold flex items-center gap-1.5">
+                            <span>{prov.icon}</span>
+                            <span>{prov.name}</span>
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                        </div>
+                        <span className="text-[10px] text-neutral-400">{prov.badge}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Available Voices Grid */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
+                    Available Neural Voices ({AVAILABLE_VOICES.filter(v => v.provider === activeVoiceSettings.provider).length})
+                  </label>
+                  <span className="text-[11px] text-neutral-400">Click to select and test sample</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto scrollbar-thin">
+                  {AVAILABLE_VOICES.filter(v => v.provider === activeVoiceSettings.provider).map((voice) => {
+                    const isSelected = activeVoiceSettings.voiceId === voice.id;
+                    const isTesting = testingVoiceId === voice.id;
+
+                    return (
+                      <div
+                        key={voice.id}
+                        onClick={() => {
+                          onUpdateGenerationSettings({
+                            ...generationSettings,
+                            speechVoice: voice.id,
+                            voiceSettings: {
+                              ...activeVoiceSettings,
+                              provider: voice.provider,
+                              voiceId: voice.id,
+                            },
+                          });
+                        }}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                          isSelected
+                            ? 'bg-neutral-850 border-indigo-500/60 shadow-md'
+                            : 'bg-neutral-950 border-neutral-800/80 hover:bg-neutral-900'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-neutral-100">{voice.name}</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-400">
+                                {voice.gender}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-neutral-400 mt-0.5">{voice.tone}</p>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-medium shrink-0">
+                            {voice.badge}
+                          </span>
+                        </div>
+
+                        <p className="text-[10px] text-neutral-400 line-clamp-2 italic">
+                          "{voice.samplePhrase}"
+                        </p>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-neutral-800/60">
+                          <span className="text-[10px] text-neutral-400">
+                            {isSelected ? '✓ Active Voice' : 'Tap to select'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTestVoice(voice);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-indigo-600 text-neutral-200 hover:text-white text-[11px] font-medium flex items-center gap-1 transition-colors"
+                          >
+                            <Volume2 className={`w-3.5 h-3.5 ${isTesting ? 'animate-pulse text-indigo-300' : ''}`} />
+                            <span>{isTesting ? 'Playing...' : 'Play Sample'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Expressive Style & Speech Speed */}
+              <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-850 space-y-4">
+                <h4 className="text-xs font-semibold text-neutral-300">Voice Expression & Dynamics</h4>
+                
+                {/* Emotion / Expression */}
+                <div>
+                  <label className="text-[11px] font-medium text-neutral-400 block mb-2">
+                    Speaking Expression & Context
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {(['natural', 'warm', 'excited', 'calm', 'professional', 'whisper'] as const).map((emo) => (
+                      <button
+                        key={emo}
+                        type="button"
+                        onClick={() =>
+                          onUpdateGenerationSettings({
+                            ...generationSettings,
+                            voiceSettings: {
+                              ...activeVoiceSettings,
+                              emotion: emo,
+                            },
+                          })
+                        }
+                        className={`py-1.5 px-2 rounded-xl text-[11px] font-medium capitalize transition-all border ${
+                          activeVoiceSettings.emotion === emo
+                            ? 'bg-indigo-500/20 border-indigo-500/60 text-indigo-300'
+                            : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200'
+                        }`}
+                      >
+                        {emo}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Speed Slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-medium text-neutral-400">
+                      Speaking Rate / Speed ({activeVoiceSettings.speed.toFixed(2)}x)
+                    </label>
+                    <span className="text-[10px] text-neutral-400">
+                      {activeVoiceSettings.speed === 1.0 ? 'Normal Pace' : activeVoiceSettings.speed > 1 ? 'Faster' : 'Slower'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="1.5"
+                    step="0.05"
+                    value={activeVoiceSettings.speed}
+                    onChange={(e) =>
+                      onUpdateGenerationSettings({
+                        ...generationSettings,
+                        speechSpeed: parseFloat(e.target.value),
+                        voiceSettings: {
+                          ...activeVoiceSettings,
+                          speed: parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full accent-indigo-400"
+                  />
+                </div>
+
+                {/* Mode Baca Suara Otomatis (Auto-Play Replies) */}
+                <div className="p-3.5 rounded-xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-indigo-400" />
+                      <span className="text-xs font-semibold text-neutral-100">
+                        Mode Baca Suara Otomatis (Auto-Read AI Replies)
+                      </span>
+                      {activeVoiceSettings.autoPlayReplies && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-medium">
+                          Aktif
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                      Setiap kali AI selesai membuat atau menjawab pesan, otomatis membacakan teks dengan suara pilihan.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateGenerationSettings({
+                        ...generationSettings,
+                        voiceSettings: {
+                          ...activeVoiceSettings,
+                          autoPlayReplies: !activeVoiceSettings.autoPlayReplies,
+                        },
+                      })
+                    }
+                    className={`w-11 h-6 rounded-full transition-colors relative shrink-0 p-0.5 border ${
+                      activeVoiceSettings.autoPlayReplies
+                        ? 'bg-indigo-600 border-indigo-500'
+                        : 'bg-neutral-800 border-neutral-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                        activeVoiceSettings.autoPlayReplies ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: INFERENCE & REASONING PARAMETERS */}
           {activeTab === 'parameters' && (
             <div className="space-y-5">
               {/* Temperature */}
@@ -482,44 +820,167 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
                   HIGH enables step-by-step reasoning tokens for Claude 3.7 Sonnet, DeepSeek R1, and Gemini 3 Pro.
                 </p>
               </div>
+            </div>
+          )}
 
-              {/* TTS Voice Selector */}
-              <div className="pt-2 border-t border-neutral-800">
-                <label className="text-xs font-medium text-neutral-200 block mb-2 flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Speech Voice & Speed</span>
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {['Kore', 'Zephyr', 'Puck', 'Fenrir', 'Charon'].map((voice) => (
+          {/* TAB: SYSTEM PERSONAS, CUSTOM PROMPTS & STRICT INDONESIAN */}
+          {activeTab === 'persona' && (
+            <div className="space-y-6">
+              {/* Strict Indonesian Language Banner */}
+              <div className="p-4 rounded-2xl bg-neutral-950 border border-emerald-900/40 bg-gradient-to-r from-emerald-950/30 via-neutral-950 to-neutral-950 space-y-3">
+                <div className="flex items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                      <Languages className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xs sm:text-sm font-bold text-neutral-100">
+                          Proteksi Wajib Bahasa Indonesia
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Aktif & Terproteksi</span>
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                        Mengunci seluruh model AI (Gemini, Claude, OpenAI, DeepSeek, Groq, Kimi) agar selalu merespons dalam Bahasa Indonesia yang alami, sopan, dan terstruktur.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-neutral-800/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newPrompt = customSystemInstruction.includes('[ATURAN WAJIB BAHASA INDONESIA]')
+                        ? customSystemInstruction
+                        : `${STRICT_INDONESIAN_PROMPT_RULE}\n\n${customSystemInstruction || 'Anda adalah Nova AI, asisten cerdas dan ramah.'}`;
+                      onUpdateCustomSystemInstruction(newPrompt);
+                      onShowToast('Aturan Wajib Bahasa Indonesia disisipkan ke prompt!', 'success');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-700/50 text-emerald-200 text-xs font-medium flex items-center gap-1.5 transition-all shadow-xs"
+                  >
+                    <Wand2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Sisipkan Aturan Wajib Bahasa Indonesia</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateCustomSystemInstruction(SYSTEM_PERSONAS[0].prompt);
+                      onSelectPersona(SYSTEM_PERSONAS[0]);
+                      onShowToast('Prompt dikembalikan ke Nova Core (Bahasa Indonesia)', 'info');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Reset ke Prompt Baku</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Preset Templates */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Pilihan Template Prompt Bahasa Indonesia</span>
+                  </label>
+                  <span className="text-[11px] text-neutral-400">Klik untuk langsung menerapkan</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {CUSTOM_PROMPT_TEMPLATES.map((tmpl) => (
                     <button
-                      key={voice}
+                      key={tmpl.id}
                       type="button"
-                      onClick={() =>
-                        onUpdateGenerationSettings({
-                          ...generationSettings,
-                          speechVoice: voice,
-                        })
-                      }
-                      className={`p-2 rounded-xl border text-xs transition-all ${
-                        generationSettings.speechVoice === voice
-                          ? 'bg-neutral-800 border-sky-500/50 text-sky-300 font-medium'
-                          : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-neutral-200'
-                      }`}
+                      onClick={() => {
+                        onUpdateCustomSystemInstruction(tmpl.prompt);
+                        onShowToast(`Template "${tmpl.name}" diterapkan!`, 'success');
+                      }}
+                      className="p-3 rounded-2xl bg-neutral-950 border border-neutral-850 hover:border-sky-700/60 hover:bg-neutral-900/80 transition-all text-left flex flex-col justify-between gap-2 group shadow-xs"
                     >
-                      {voice}
+                      <div>
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="text-xs font-semibold text-neutral-200 group-hover:text-sky-300 transition-colors">
+                            {tmpl.name}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-400 shrink-0">
+                            {tmpl.badge}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
+                          {tmpl.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-neutral-900 text-[10px] text-neutral-400">
+                        <span className="text-sky-400 font-medium group-hover:underline">Gunakan template ini →</span>
+                        <span>{tmpl.category}</span>
+                      </div>
                     </button>
                   ))}
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* TAB: SYSTEM PERSONAS & INSTRUCTIONS */}
-          {activeTab === 'persona' && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block mb-2">
-                  Preset System Personas
+              {/* Main Custom Prompt Editor */}
+              <div className="space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-neutral-100 flex items-center gap-1.5">
+                      <FileCode className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Editor Prompt Kustom (System Instruction)</span>
+                    </label>
+                    <p className="text-[11px] text-neutral-400 mt-0.5">
+                      Instruksi ini akan langsung dikirimkan ke model pada setiap sesi chat untuk memandu gaya jawaban.
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(customSystemInstruction);
+                        onShowToast('Prompt berhasil disalin ke clipboard', 'success');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-[11px] flex items-center gap-1 transition-colors"
+                    >
+                      <Copy className="w-3 h-3 text-neutral-400" />
+                      <span>Salin</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onShowToast('Prompt kustom aktif tersimpan!', 'success');
+                      }}
+                      className="px-3 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-semibold text-[11px] flex items-center gap-1 transition-colors"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>Simpan Prompt</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    rows={6}
+                    value={customSystemInstruction}
+                    onChange={(e) => onUpdateCustomSystemInstruction(e.target.value)}
+                    placeholder="Tuliskan prompt kustom atau instruksi khusus untuk asisten AI..."
+                    className="w-full p-3.5 rounded-2xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-100 font-mono leading-relaxed focus:outline-none focus:border-sky-500 transition-colors scrollbar-thin resize-y min-h-[120px]"
+                  />
+                  <div className="flex items-center justify-between px-2 pt-1 text-[10px] text-neutral-400">
+                    <span>💡 Model otomatis memprioritaskan instruksi di atas saat menghasilkan jawaban.</span>
+                    <span className="font-mono">{customSystemInstruction.length} karakter</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Persona Karakter Bawaan */}
+              <div className="space-y-2.5 pt-2 border-t border-neutral-850">
+                <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block">
+                  Pilihan Karakter Persona Bawaan (Preset)
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {SYSTEM_PERSONAS.map((p) => {
@@ -531,6 +992,7 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
                         onClick={() => {
                           onSelectPersona(p);
                           onUpdateCustomSystemInstruction(p.prompt);
+                          onShowToast(`Persona ${p.name} dipilih!`, 'success');
                         }}
                         className={`p-3 rounded-2xl border text-left transition-all ${
                           isSelected
@@ -539,27 +1001,14 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-xs">{p.name}</span>
+                          <span className="font-semibold text-xs text-neutral-100">{p.name}</span>
                           {isSelected && <Check className="w-3.5 h-3.5 text-sky-400" />}
                         </div>
-                        <p className="text-[11px] text-neutral-400 line-clamp-2">{p.role}</p>
+                        <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">{p.role}</p>
                       </button>
                     );
                   })}
                 </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-neutral-200 block mb-1.5">
-                  Active System Instruction
-                </label>
-                <textarea
-                  rows={4}
-                  value={customSystemInstruction}
-                  onChange={(e) => onUpdateCustomSystemInstruction(e.target.value)}
-                  placeholder="Enter custom instructions for Nova's behavior and tone..."
-                  className="w-full p-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-200 leading-relaxed focus:outline-none focus:border-sky-500 scrollbar-thin"
-                />
               </div>
             </div>
           )}

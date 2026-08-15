@@ -12,7 +12,9 @@ import {
   Activity, 
   ChevronDown, 
   Bot,
-  Plus
+  Plus,
+  Radio,
+  Volume2
 } from 'lucide-react';
 import { ModelOption, SystemPersona } from '../config/endpoints';
 
@@ -25,10 +27,15 @@ interface HeaderProps {
   onSelectPersona: (persona: SystemPersona) => void;
   onToggleSidebar: () => void;
   onOpenSettings: (initialTab?: string) => void;
+  onOpenLiveVoice?: () => void;
   onNewChat: () => void;
   serverOnline: boolean;
   latencyMs: number;
   hasApiKey: boolean;
+  autoPlayReplies?: boolean;
+  onToggleAutoPlayReplies?: () => void;
+  isSpeakingAudio?: boolean;
+  onStopAudio?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,10 +47,15 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectPersona,
   onToggleSidebar,
   onOpenSettings,
+  onOpenLiveVoice,
   onNewChat,
   serverOnline,
   latencyMs,
   hasApiKey,
+  autoPlayReplies,
+  onToggleAutoPlayReplies,
+  isSpeakingAudio,
+  onStopAudio,
 }) => {
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false);
   const [personaDropdownOpen, setPersonaDropdownOpen] = React.useState(false);
@@ -191,8 +203,9 @@ export const Header: React.FC<HeaderProps> = ({
               id="persona-dropdown-menu"
               className="absolute left-0 top-full mt-2 w-64 rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl p-2 z-50"
             >
-              <div className="px-2 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-                Assistant Persona
+              <div className="px-2 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Persona & Prompt</span>
+                <span className="text-[10px] text-emerald-400 font-medium">🇮🇩 Wajib ID</span>
               </div>
               <div className="space-y-1">
                 {personas.map((p) => {
@@ -215,13 +228,76 @@ export const Header: React.FC<HeaderProps> = ({
                   );
                 })}
               </div>
+              <div className="pt-1.5 mt-1.5 border-t border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPersonaDropdownOpen(false);
+                    onOpenSettings('persona');
+                  }}
+                  className="w-full text-left px-2 py-1.5 rounded-lg text-sky-400 hover:bg-neutral-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Kustomisasi Prompt & Bahasa...</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Right section: System Status, Endpoints / Parameters, Settings */}
+      {/* Right section: System Status, Live Voice, Endpoints / Parameters, Settings */}
       <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Auto-Read Voice Toggle Button */}
+        {onToggleAutoPlayReplies && (
+          <button
+            id="btn-toggle-autoread-voice"
+            onClick={isSpeakingAudio && onStopAudio ? onStopAudio : onToggleAutoPlayReplies}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs ${
+              isSpeakingAudio
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 animate-pulse'
+                : autoPlayReplies
+                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30'
+                : 'bg-neutral-900/60 text-neutral-400 border-neutral-800/80 hover:text-neutral-200 hover:bg-neutral-850'
+            }`}
+            title={
+              isSpeakingAudio
+                ? 'Sedang membacakan respon... Klik untuk menghentikan suara'
+                : autoPlayReplies
+                ? 'Mode Baca Suara: AKTIF (AI otomatis membaca setiap respon). Klik untuk menonaktifkan.'
+                : 'Mode Baca Suara: NONAKTIF. Klik untuk mengaktifkan baca suara otomatis.'
+            }
+            aria-label="Toggle Auto-Read AI Replies"
+          >
+            {isSpeakingAudio ? (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-rose-400 animate-bounce" />
+                <span className="hidden md:inline text-[11px] text-rose-300">Stop Suara</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className={`w-3.5 h-3.5 ${autoPlayReplies ? 'text-indigo-400' : 'text-neutral-400'}`} />
+                <span className="hidden md:inline text-[11px]">
+                  {autoPlayReplies ? 'Baca Suara: ON' : 'Baca Suara: OFF'}
+                </span>
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Live Neural Voice / Gemini Live Overlay Trigger */}
+        {onOpenLiveVoice && (
+          <button
+            id="btn-open-live-voice"
+            onClick={onOpenLiveVoice}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-indigo-950/60 border border-indigo-800/60 hover:bg-indigo-900/80 text-indigo-300 hover:text-white transition-all text-xs font-semibold shadow-xs group"
+            title="Start Gemini Live / Neural Real-Time Voice Conversation"
+          >
+            <Radio className="w-3.5 h-3.5 text-indigo-400 group-hover:animate-pulse" />
+            <span className="hidden sm:inline">Live Voice</span>
+          </button>
+        )}
+
         {/* Latency & Health Indicator */}
         <button
           id="btn-health-indicator"

@@ -131,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <div className="flex items-center gap-2">
               <Plus className="w-4 h-4 text-sky-400 group-hover:rotate-90 transition-transform" />
-              <span>New Conversation</span>
+              <span>Obrolan Baru</span>
             </div>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700/50 font-mono">
               ⌘K
@@ -148,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search chat history..."
+              placeholder="Cari riwayat obrolan..."
               className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-neutral-900/80 border border-neutral-800/80 text-xs text-neutral-200 placeholder-neutral-400 focus:outline-none focus:border-sky-500/50 transition-colors"
             />
             {searchQuery && (
@@ -170,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div>
               <div className="px-2 pb-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
                 <Pin className="w-3 h-3 text-sky-400" />
-                <span>Pinned</span>
+                <span>Disematkan</span>
               </div>
               <div className="space-y-1">
                 {pinnedSessions.map((session) => (
@@ -205,12 +205,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Regular History Section */}
           <div>
             <div className="px-2 pb-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Conversations ({regularSessions.length})</span>
+              <span>Daftar Obrolan ({regularSessions.length})</span>
             </div>
 
             {regularSessions.length === 0 && pinnedSessions.length === 0 ? (
               <div className="p-4 text-center text-xs text-neutral-400">
-                {searchQuery ? 'No matching conversations' : 'No previous chats'}
+                {searchQuery ? 'Tidak ada obrolan yang cocok' : 'Belum ada obrolan'}
               </div>
             ) : (
               <div className="space-y-1">
@@ -247,7 +247,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="pt-2">
             <div className="px-2 pb-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
               <Compass className="w-3 h-3 text-sky-400" />
-              <span>Prompt Presets</span>
+              <span>Pilihan Prompt Cepat</span>
             </div>
             <div className="space-y-1">
               {PROMPT_PRESETS.map((preset, idx) => (

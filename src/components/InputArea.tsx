@@ -17,7 +17,8 @@ import {
   MapPin,
   FileText,
   Loader2,
-  UploadCloud
+  UploadCloud,
+  Volume2
 } from 'lucide-react';
 import { Attachment, GeoLocationData } from '../types/chat';
 import { LocationCard } from './LocationCard';
@@ -38,6 +39,8 @@ interface InputAreaProps {
   isLocating: boolean;
   enableWebSearch: boolean;
   onToggleWebSearch: () => void;
+  autoPlaySpeech?: boolean;
+  onToggleAutoPlaySpeech?: () => void;
   onShowToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -56,6 +59,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
   isLocating,
   enableWebSearch,
   onToggleWebSearch,
+  autoPlaySpeech,
+  onToggleAutoPlaySpeech,
   onShowToast,
 }) => {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -312,10 +317,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
               onKeyDown={handleKeyDown}
               placeholder={
                 location
-                  ? `Ask about your current location in ${location.city || 'your area'} or anything else...`
+                  ? `Tanyakan info seputar lokasi Anda di ${location.city || 'sekitar Anda'} atau apa saja...`
                   : attachments.length > 0
-                  ? 'Ask about the attached image or file...'
-                  : 'Message Nova or ask anything...'
+                  ? 'Tanyakan sesuatu tentang berkas / gambar yang dilampirkan...'
+                  : 'Ketik pesan untuk Nova atau tanyakan apa saja...'
               }
               className="w-full bg-transparent px-4 py-3.5 text-sm text-neutral-100 placeholder-neutral-400 focus:outline-none resize-none max-h-44 min-h-[48px] leading-relaxed scrollbar-thin"
             />
@@ -438,6 +443,31 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 >
                   {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
+
+                {/* Button: Auto-Read Replies (Mode Baca Suara) */}
+                {onToggleAutoPlaySpeech && (
+                  <button
+                    id="btn-input-toggle-autoread"
+                    type="button"
+                    onClick={onToggleAutoPlaySpeech}
+                    className={`px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 transition-colors ${
+                      autoPlaySpeech
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-medium'
+                        : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                    }`}
+                    title={
+                      autoPlaySpeech
+                        ? 'Mode Baca Suara: AKTIF (AI otomatis membaca balasan). Klik untuk menonaktifkan.'
+                        : 'Mode Baca Suara: NONAKTIF. Klik untuk mengaktifkan baca suara otomatis.'
+                    }
+                    aria-label="Toggle Auto-Read Audio"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span className="text-[11px] hidden sm:inline">
+                      {autoPlaySpeech ? 'Baca Suara' : 'Baca Suara'}
+                    </span>
+                  </button>
+                )}
 
                 {/* Button: Web search grounding */}
                 <button

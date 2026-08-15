@@ -73,6 +73,13 @@ function resolveApiKey(provider: ModelProvider, clientKeys?: ChatRequestBody['ap
         process.env.OPENROUTER_API_KEY?.trim() ||
         ""
       );
+    case 'elevenlabs' as ModelProvider:
+      return (
+        clientKeys?.elevenlabsApiKey?.trim() ||
+        RAW_DEVELOPER_API_KEYS.elevenlabsApiKey?.trim() ||
+        process.env.ELEVENLABS_API_KEY?.trim() ||
+        ""
+      );
     case 'custom':
       return (
         clientKeys?.customApiKey?.trim() ||
@@ -83,6 +90,21 @@ function resolveApiKey(provider: ModelProvider, clientKeys?: ChatRequestBody['ap
     default:
       return "";
   }
+}
+
+// Helper to build strict Indonesian system instruction
+function buildStrictIndonesianSystemInstruction(customInstruction?: string): string {
+  const mandatoryRules = `[ATURAN UTAMA & BAHASA MUTLAK]:
+1. Anda adalah Nova AI, asisten kecerdasan buatan cerdas, ramah, dan profesional.
+2. WAJIB dan SELALU gunakan BAHASA INDONESIA secara penuh sebagai bahasa default dalam SEMUA respon, salam pembuka (contoh: "Halo! Saya Nova. Ada yang bisa saya bantu hari ini?"), penjelasan, dan percakapan.
+3. DILARANG menggunakan Bahasa Inggris untuk sapaan atau percakapan umum. Jangan pernah menyapa dengan bahasa Inggris seperti "How can I help you today?". Gunakan selalu Bahasa Indonesia seperti "Halo! Ada yang bisa saya bantu hari ini?".
+4. Format jawaban menggunakan Markdown yang rapi, terstruktur, dan mudah dibaca. Istilah teknis atau sintaks pemrograman tetap dipertahankan sesuai kebutuhan dengan penjelasan berbahasa Indonesia.`;
+
+  if (!customInstruction || !customInstruction.trim()) {
+    return mandatoryRules;
+  }
+
+  return `${mandatoryRules}\n\n[Instruksi Tambahan]:\n${customInstruction.trim()}`;
 }
 
 // Helper to format message text with attached GPS location and document metadata
@@ -155,9 +177,7 @@ async function processGeminiRequest(body: ChatRequestBody, apiKey: string): Prom
     tools?: Array<{ googleSearch?: Record<string, never> }>;
   } = {};
 
-  if (body.systemInstruction) {
-    config.systemInstruction = body.systemInstruction;
-  }
+  config.systemInstruction = buildStrictIndonesianSystemInstruction(body.systemInstruction);
   if (typeof body.temperature === 'number') {
     config.temperature = body.temperature;
   }
@@ -244,9 +264,7 @@ async function processAnthropicRequest(body: ChatRequestBody, apiKey: string): P
     messages: anthropicMessages,
   };
 
-  if (body.systemInstruction) {
-    payload.system = body.systemInstruction;
-  }
+  payload.system = buildStrictIndonesianSystemInstruction(body.systemInstruction);
   if (typeof body.temperature === 'number') {
     payload.temperature = body.temperature;
   }
@@ -335,9 +353,7 @@ async function processOpenAICompatibleRequest(
   }
 
   const messages: any[] = [];
-  if (body.systemInstruction) {
-    messages.push({ role: 'system', content: body.systemInstruction });
-  }
+  messages.push({ role: 'system', content: buildStrictIndonesianSystemInstruction(body.systemInstruction) });
 
   for (const msg of body.messages) {
     const role = msg.role;
@@ -424,7 +440,7 @@ export async function processChatRequest(body: ChatRequestBody): Promise<ChatRes
 
     const lastUserMessage = body.messages.filter(m => m.role === 'user').pop()?.content || "";
     return {
-      text: `### 🔑 API Key Required for ${targetModel}\n\nYou selected **${targetModel}** (${providerNames[provider] || provider}).\n\nTo activate live inference with this model, you can provide your API key in either of two ways:\n\n1. **In the Settings Panel**: Click the **⚙️ Settings** icon in the header, navigate to **API Keys & Providers**, and enter your \`${provider.toUpperCase()}_API_KEY\`.\n2. **In Raw Config File / .env**: Open \`.env\` or \`src/config/endpoints.ts\` in the workspace and set your key.\n\n---\n#### 💬 Preview Response to:\n> "${lastUserMessage}"\n\n- **Model Selected**: \`${targetModel}\`\n- **Provider**: \`${provider}\`\n- **Multimodal & Tools**: Ready as soon as key is saved!`,
+      text: `### 🔑 Kunci API Diperlukan untuk ${targetModel}\n\nAnda memilih model **${targetModel}** (${providerNames[provider] || provider}).\n\nUntuk mengaktifkan model ini, Anda dapat memasukkan kunci API melalui salah satu cara berikut:\n\n1. **Melalui Panel Pengaturan**: Klik ikon **⚙️ Pengaturan** di menu atas, pilih tab **Kunci API & Provider**, lalu masukkan \`${provider.toUpperCase()}_API_KEY\` Anda.\n2. **Melalui Berkas Konfigurasi / .env**: Buka berkas \`.env\` atau \`src/config/endpoints.ts\` dan simpan kunci Anda.\n\n---\n#### 💬 Pesan Anda:\n> "${lastUserMessage}"\n\n- **Model Terpilih**: \`${targetModel}\`\n- **Provider**: \`${provider}\`\n- **Fitur Multimodal & Vision**: Otomatis aktif setelah kunci API tersimpan!`,
       model: targetModel,
       tokensEstimated: 150,
     };
@@ -455,25 +471,179 @@ export async function processChatRequest(body: ChatRequestBody): Promise<ChatRes
 }
 
 /**
- * Text-to-Speech synthesis handler
+ * Clean markdown and technical syntax for natural generative neural speech
+ */
+function sanitizeTextForSpeech(rawText: string): string {
+  return rawText
+    .replace(/```[\s\S]*?```/g, ' [code snippet omitted] ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[*_#~>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export interface SpeechRequestOptions {
+  text: string;
+  provider?: 'gemini' | 'openai' | 'elevenlabs';
+  voice?: string;
+  speed?: number;
+  emotion?: string;
+  clientKeys?: ChatRequestBody['apiKeys'];
+}
+
+export interface SpeechResponseResult {
+  audioBase64: string;
+  mimeType: string;
+  provider: 'gemini' | 'openai' | 'elevenlabs';
+  voiceUsed: string;
+  sampleRate?: number;
+}
+
+/**
+ * Text-to-Speech synthesis handler (Gemini Live, OpenAI Audio API, ElevenLabs)
  */
 export async function processSpeechRequest(
-  text: string, 
-  voiceName: string = 'Kore',
-  clientKeys?: ChatRequestBody['apiKeys']
-): Promise<{ audioBase64: string }> {
-  const apiKey = resolveApiKey('google', clientKeys);
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is required for Gemini TTS generation.");
+  options: SpeechRequestOptions | string,
+  legacyVoice: string = 'Kore',
+  legacyKeys?: ChatRequestBody['apiKeys']
+): Promise<SpeechResponseResult> {
+  // Normalize options
+  const opts: SpeechRequestOptions = typeof options === 'string'
+    ? { text: options, voice: legacyVoice, clientKeys: legacyKeys }
+    : options;
+
+  const rawText = opts.text || '';
+  const cleanText = sanitizeTextForSpeech(rawText);
+  if (!cleanText) {
+    throw new Error("Text content is empty or contains no speakable characters.");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
-  const selectedVoice = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'].includes(voiceName) ? voiceName : 'Kore';
+  // Truncate to reasonable length for instant low-latency neural generation
+  const speechInput = cleanText.slice(0, 2500);
+  const targetProvider = opts.provider || (
+    opts.voice?.startsWith('21m') || opts.voice?.startsWith('pNIn') || opts.voice?.startsWith('ErX') || opts.voice?.startsWith('EXA') || opts.voice?.startsWith('TxG')
+      ? 'elevenlabs'
+      : ['alloy', 'echo', 'shimmer', 'ash', 'ballad', 'coral', 'sage', 'verse', 'nova', 'onyx', 'fable'].includes(opts.voice?.toLowerCase() || '')
+      ? 'openai'
+      : 'gemini'
+  );
+
+  // 1. ELEVENLABS ULTRA-REALISTIC GENERATIVE VOICE
+  if (targetProvider === 'elevenlabs') {
+    const elevenKey = resolveApiKey('elevenlabs' as ModelProvider, opts.clientKeys);
+    if (elevenKey) {
+      try {
+        const voiceId = opts.voice && opts.voice.length > 10 ? opts.voice : '21m00Tcm4TlvDq8ikWAM'; // Rachel default
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': elevenKey,
+          },
+          body: JSON.stringify({
+            text: speechInput,
+            model_id: 'eleven_multilingual_v2',
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.85,
+              style: opts.emotion === 'excited' ? 0.6 : opts.emotion === 'calm' ? 0.3 : 0.45,
+              use_speaker_boost: true,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.detail?.message || `ElevenLabs API error (${response.status})`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64Audio = buffer.toString('base64');
+
+        return {
+          audioBase64: base64Audio,
+          mimeType: 'audio/mp3',
+          provider: 'elevenlabs',
+          voiceUsed: voiceId,
+        };
+      } catch (err: unknown) {
+        console.warn('ElevenLabs speech generation fallback to Gemini Live:', err);
+      }
+    }
+  }
+
+  // 2. OPENAI AUDIO API (TTS-1-HD / REALTIME AUDIO VOICES)
+  if (targetProvider === 'openai') {
+    const openaiKey = resolveApiKey('openai', opts.clientKeys);
+    if (openaiKey) {
+      try {
+        const allowedVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer', 'ash', 'ballad', 'coral', 'sage', 'verse'];
+        const chosenVoice = opts.voice && allowedVoices.includes(opts.voice.toLowerCase()) ? opts.voice.toLowerCase() : 'alloy';
+
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'tts-1-hd',
+            input: speechInput,
+            voice: chosenVoice,
+            speed: typeof opts.speed === 'number' ? Math.max(0.5, Math.min(2.0, opts.speed)) : 1.0,
+          }),
+        });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.error?.message || `OpenAI Audio API error (${response.status})`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64Audio = buffer.toString('base64');
+
+        return {
+          audioBase64: base64Audio,
+          mimeType: 'audio/mp3',
+          provider: 'openai',
+          voiceUsed: chosenVoice,
+        };
+      } catch (err: unknown) {
+        console.warn('OpenAI Audio speech generation fallback to Gemini Live:', err);
+      }
+    }
+  }
+
+  // 3. GOOGLE GEMINI LIVE NEURAL AUDIO (gemini-3.1-flash-tts-preview)
+  const geminiKey = resolveApiKey('google', opts.clientKeys);
+  if (!geminiKey) {
+    throw new Error("GEMINI_API_KEY is required for Gemini Live Neural Audio generation.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: geminiKey });
+  const allowedGeminiVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'];
+  const selectedVoice = opts.voice && allowedGeminiVoices.includes(opts.voice) ? opts.voice : 'Kore';
+
+  // Condition the prompt with natural human conversational delivery instructions
+  const emotionDirective = opts.emotion === 'excited'
+    ? 'Speak in an enthusiastic, upbeat, and energetic human voice: '
+    : opts.emotion === 'calm'
+    ? 'Speak in a calm, soothing, and thoughtful conversational voice: '
+    : opts.emotion === 'warm'
+    ? 'Speak in a warm, friendly, empathetic, and natural tone: '
+    : opts.emotion === 'whisper'
+    ? 'Speak in a soft, gentle whisper tone: '
+    : 'Speak with a natural, conversational human tone with realistic breath pauses and clear intonation: ';
+
+  const conditionedPrompt = `${emotionDirective}${speechInput}`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: text.slice(0, 1000) }] }],
+      contents: [{ parts: [{ text: conditionedPrompt }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
@@ -486,13 +656,19 @@ export async function processSpeechRequest(
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) {
-      throw new Error("No audio payload returned from Gemini TTS model.");
+      throw new Error("No audio data returned from Gemini Live TTS model.");
     }
 
-    return { audioBase64: base64Audio };
+    return {
+      audioBase64: base64Audio,
+      mimeType: 'audio/pcm;rate=24000',
+      sampleRate: 24000,
+      provider: 'gemini',
+      voiceUsed: selectedVoice,
+    };
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error("Gemini TTS Error:", errorMessage);
-    throw new Error(`TTS generation failed: ${errorMessage}`);
+    console.error("Gemini Live TTS Error:", errorMessage);
+    throw new Error(`Real-Time Neural Speech generation failed: ${errorMessage}`);
   }
 }
