@@ -3,6 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ApiKeysConfig } from '../config/endpoints';
+
+export interface GeoLocationData {
+  latitude: number;
+  longitude: number;
+  accuracy?: number; // in meters
+  altitude?: number | null;
+  speed?: number | null;
+  heading?: number | null;
+  timestamp: number;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  mapsUrl: string;
+}
+
 export interface Attachment {
   id: string;
   name: string;
@@ -11,6 +28,8 @@ export interface Attachment {
   dataUrl: string; // base64 data url
   base64Data: string; // pure base64
   mimeType: string;
+  width?: number;
+  height?: number;
 }
 
 export interface Message {
@@ -19,6 +38,7 @@ export interface Message {
   content: string;
   timestamp: number;
   attachments?: Attachment[];
+  location?: GeoLocationData;
   thinking?: string;
   modelUsed?: string;
   isStreaming?: boolean;
@@ -67,15 +87,18 @@ export interface ChatRequestBody {
     role: 'user' | 'assistant' | 'system';
     content: string;
     attachments?: Array<{
+      name?: string;
       mimeType: string;
       base64Data: string;
     }>;
+    location?: GeoLocationData;
   }>;
   systemInstruction?: string;
   temperature?: number;
   topP?: number;
   thinkingLevel?: 'HIGH' | 'LOW' | 'MINIMAL';
   enableWebSearch?: boolean;
+  apiKeys?: ApiKeysConfig;
 }
 
 export interface ChatResponseResult {
@@ -85,4 +108,6 @@ export interface ChatResponseResult {
   model: string;
   tokensEstimated?: number;
 }
+
+
 

@@ -10,11 +10,14 @@ import {
   EndpointConfig, 
   ModelOption, 
   SYSTEM_PERSONAS, 
-  SystemPersona 
+  SystemPersona,
+  ApiKeysConfig,
+  RAW_DEVELOPER_API_KEYS
 } from './config/endpoints';
-import { Attachment, ChatSession, GenerationSettings, Message } from './types/chat';
+import { Attachment, ChatSession, GenerationSettings, GeoLocationData, Message } from './types/chat';
 import { apiService } from './services/apiService';
 import { audioService } from './services/audioService';
+import { locationService } from './services/locationService';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -25,6 +28,7 @@ import { ToastContainer, ToastMessage } from './components/Toast';
 const STORAGE_KEY_SESSIONS = 'nova_ai_sessions_v1';
 const STORAGE_KEY_SETTINGS = 'nova_ai_settings_v1';
 const STORAGE_KEY_ENDPOINTS = 'nova_ai_endpoints_v1';
+const STORAGE_KEY_APIKEYS = 'nova_ai_apikeys_v1';
 
 export default function App() {
   // Models & Personas
@@ -33,6 +37,16 @@ export default function App() {
   const [personas] = React.useState<SystemPersona[]>(SYSTEM_PERSONAS);
   const [selectedPersona, setSelectedPersona] = React.useState<SystemPersona>(SYSTEM_PERSONAS[0]);
   const [customSystemInstruction, setCustomSystemInstruction] = React.useState<string>(SYSTEM_PERSONAS[0].prompt);
+
+  // API Keys (Multi-Provider: Gemini, Claude, Kimi, OpenAI, DeepSeek, Groq, Custom)
+  const [apiKeys, setApiKeys] = React.useState<ApiKeysConfig>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_APIKEYS);
+      return saved ? { ...RAW_DEVELOPER_API_KEYS, ...JSON.parse(saved) } : RAW_DEVELOPER_API_KEYS;
+    } catch {
+      return RAW_DEVELOPER_API_KEYS;
+    }
+  });
 
   // Settings
   const [endpointConfig, setEndpointConfig] = React.useState<EndpointConfig>(() => {
@@ -97,6 +111,8 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = React.useState<string>(() => sessions[0]?.id || '');
   const [input, setInput] = React.useState('');
   const [attachments, setAttachments] = React.useState<Attachment[]>([]);
+  const [location, setLocation] = React.useState<GeoLocationData | null>(null);
+  const [isLocating, setIsLocating] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [enableWebSearch, setEnableWebSearch] = React.useState(false);
 
@@ -139,6 +155,15 @@ export default function App() {
       console.warn('Failed to save endpoints:', e);
     }
   }, [endpointConfig]);
+
+  // Persist API keys
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_APIKEYS, JSON.stringify(apiKeys));
+    } catch (e) {
+      console.warn('Failed to save apiKeys:', e);
+    }
+  }, [apiKeys]);
 
   // Toast Helper
   const showToast = (title: string, type: 'success' | 'error' | 'info' = 'info', description?: string) => {
@@ -263,29 +288,58 @@ export default function App() {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
+  // Active GPS Location acquisition & management
+  const handleToggleLocation = async () => {
+    if (isLocating) return;
+    setIsLocating(true);
+    try {
+      const loc = await locationService.getCurrentLocation();
+      setLocation(loc);
+      showToast(
+        `GPS fixed: ${loc.city || loc.state || `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`}`,
+        'success',
+        loc.address || `Accurate to ±${loc.accuracy}m`
+      );
+    } catch (err: any) {
+      console.error('Location acquisition error:', err);
+      showToast(err.message || 'Could not acquire GPS position. Check browser permissions.', 'error');
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const handleRemoveLocation = () => {
+    setLocation(null);
+    showToast('GPS location removed from context', 'info');
+  };
+
   // Submit Prompt Handler
   const handleSendMessage = async () => {
-    if ((!input.trim() && attachments.length === 0) || isLoading) return;
+    if ((!input.trim() && attachments.length === 0 && !location) || isLoading) return;
 
     const userText = input.trim();
     const currentAttachments = [...attachments];
+    const currentLocation = location;
 
     // Clear input & attachments immediately for responsive UI
     setInput('');
     setAttachments([]);
+    // Note: We keep or clear location? Let's keep location active or clear per preference; clearing lets user control per prompt
+    setLocation(null);
 
     const userMessage: Message = {
       id: Math.random().toString(36).substring(7),
       role: 'user',
-      content: userText,
+      content: userText || (currentLocation ? `My current GPS location is attached (${currentLocation.city || `${currentLocation.latitude}, ${currentLocation.longitude}`}).` : ''),
       timestamp: Date.now(),
       attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
+      location: currentLocation || undefined,
     };
 
     // Auto generate title for new session from first message
     const isFirstMessage = activeMessages.length === 0;
     const sessionTitle = isFirstMessage
-      ? userText.slice(0, 32) + (userText.length > 32 ? '...' : '') || 'Image Analysis'
+      ? (userText ? userText.slice(0, 32) + (userText.length > 32 ? '...' : '') : currentLocation ? `Near ${currentLocation.city || 'GPS Location'}` : 'Image Analysis')
       : activeSession.title;
 
     // Update session with user message
@@ -316,12 +370,15 @@ export default function App() {
             mimeType: a.mimeType,
             base64Data: a.base64Data,
           })),
+          location: m.location,
         })),
         systemInstruction: customSystemInstruction || selectedPersona.prompt,
         temperature: generationSettings.temperature,
         topP: generationSettings.topP,
         thinkingLevel: generationSettings.thinkingLevel,
         enableWebSearch,
+        apiKeys,
+        location: currentLocation || undefined,
       };
 
       const response = await apiService.sendChatMessage(payload, endpointConfig);
@@ -412,12 +469,14 @@ export default function App() {
           mimeType: a.mimeType,
           base64Data: a.base64Data,
         })),
+        location: m.location,
       })),
       systemInstruction: customSystemInstruction || selectedPersona.prompt,
       temperature: generationSettings.temperature,
       topP: generationSettings.topP,
       thinkingLevel: generationSettings.thinkingLevel,
       enableWebSearch,
+      apiKeys,
     };
 
     apiService
@@ -472,6 +531,8 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY_SESSIONS);
     localStorage.removeItem(STORAGE_KEY_SETTINGS);
     localStorage.removeItem(STORAGE_KEY_ENDPOINTS);
+    localStorage.removeItem(STORAGE_KEY_APIKEYS);
+    setApiKeys(RAW_DEVELOPER_API_KEYS);
     const freshSession: ChatSession = {
       id: Math.random().toString(36).substring(7),
       title: 'New Conversation',
@@ -560,6 +621,10 @@ export default function App() {
             attachments={attachments}
             onAddAttachment={handleAddAttachment}
             onRemoveAttachment={handleRemoveAttachment}
+            location={location}
+            onToggleLocation={handleToggleLocation}
+            onRemoveLocation={handleRemoveLocation}
+            isLocating={isLocating}
             enableWebSearch={enableWebSearch}
             onToggleWebSearch={() => setEnableWebSearch((prev) => !prev)}
             onShowToast={showToast}
@@ -574,6 +639,8 @@ export default function App() {
         initialTab={settingsTab}
         endpointConfig={endpointConfig}
         onUpdateEndpointConfig={setEndpointConfig}
+        apiKeys={apiKeys}
+        onUpdateApiKeys={setApiKeys}
         generationSettings={generationSettings}
         onUpdateGenerationSettings={setGenerationSettings}
         selectedPersona={selectedPersona}

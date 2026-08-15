@@ -18,11 +18,16 @@ import {
   Image as ImageIcon,
   ArrowDown,
   BrainCircuit,
-  Globe
+  Globe,
+  FileText,
+  MapPin,
+  Camera
 } from 'lucide-react';
-import { Message } from '../types/chat';
+import { Attachment, Message } from '../types/chat';
 import { ModelOption } from '../config/endpoints';
 import { audioService } from '../services/audioService';
+import { LocationCard } from './LocationCard';
+import { ImageLightbox } from './ImageLightbox';
 
 interface ChatAreaProps {
   messages: Message[];
@@ -49,6 +54,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [activeSpeechId, setActiveSpeechId] = React.useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [showScrollBottom, setShowScrollBottom] = React.useState(false);
+  const [lightboxAttachment, setLightboxAttachment] = React.useState<Attachment | null>(null);
 
   // Subscribe to audio state
   React.useEffect(() => {
@@ -153,30 +159,50 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {/* User Attachments Preview if any */}
                   {msg.attachments && msg.attachments.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-1 justify-end">
-                      {msg.attachments.map((att) => (
-                        <div
-                          key={att.id}
-                          className="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-2 max-w-xs shadow-xs"
-                        >
-                          {att.mimeType.startsWith('image/') ? (
-                            <img
-                              src={att.dataUrl}
-                              alt={att.name}
-                              className="w-12 h-12 object-cover rounded-lg"
-                            />
-                          ) : (
-                            <div className="w-12 h-12 rounded-lg bg-neutral-800 flex items-center justify-center">
-                              <ImageIcon className="w-5 h-5 text-neutral-400" />
+                      {msg.attachments.map((att) => {
+                        const isImage = att.mimeType.startsWith('image/');
+                        return (
+                          <div
+                            key={att.id}
+                            className="p-1.5 rounded-xl bg-neutral-900/90 border border-neutral-800 flex items-center gap-2 max-w-xs shadow-xs hover:border-neutral-700 transition-all"
+                          >
+                            {isImage ? (
+                              <button
+                                type="button"
+                                onClick={() => setLightboxAttachment(att)}
+                                className="cursor-pointer overflow-hidden rounded-lg hover:opacity-90 transition-opacity"
+                                title="Click to view full image"
+                              >
+                                <img
+                                  src={att.dataUrl}
+                                  alt={att.name}
+                                  className="w-12 h-12 object-cover rounded-lg"
+                                />
+                              </button>
+                            ) : (
+                              <div className="w-12 h-12 rounded-lg bg-neutral-800 text-sky-400 flex items-center justify-center shrink-0">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                            )}
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="text-xs font-medium text-neutral-200 truncate">{att.name}</span>
+                              <span className="text-[10px] text-neutral-400">
+                                {(att.size / 1024).toFixed(1)} KB &bull; {att.mimeType.split('/')[1] || 'file'}
+                              </span>
                             </div>
-                          )}
-                          <div className="flex flex-col min-w-0 pr-2">
-                            <span className="text-xs font-medium text-neutral-200 truncate">{att.name}</span>
-                            <span className="text-[10px] text-neutral-400">
-                              {(att.size / 1024).toFixed(1)} KB
-                            </span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Active GPS Location Card if attached */}
+                  {msg.location && (
+                    <div className="w-full flex justify-end">
+                      <LocationCard
+                        location={msg.location}
+                        onShowToast={onShowToast}
+                      />
                     </div>
                   )}
 
@@ -328,6 +354,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <ArrowDown className="w-4 h-4" />
         </button>
       )}
+
+      {/* Lightbox for viewing full-size images */}
+      <ImageLightbox
+        attachment={lightboxAttachment}
+        onClose={() => setLightboxAttachment(null)}
+      />
     </div>
   );
 };
@@ -354,17 +386,43 @@ const WelcomeHero: React.FC<WelcomeHeroProps> = ({ activeModel, onSelectPrompt }
         How can Nova help you today?
       </h1>
       <p className="text-xs sm:text-sm text-neutral-400 mt-2 max-w-md leading-relaxed">
-        Powered by <strong className="text-neutral-200">{activeModel.name}</strong> with multimodal reasoning, code generation, and voice intelligence.
+        Powered by <strong className="text-neutral-200">{activeModel.name}</strong> with multimodal vision, file uploads, real-time GPS location, and voice dictation.
       </p>
 
       {/* Quick Starter Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full mt-8 text-left">
         <button
+          onClick={() => onSelectPrompt('What are the best attractions, cafes, and recommended places around my current GPS location?')}
+          className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-emerald-800/60 transition-all text-xs flex flex-col gap-1 group shadow-xs"
+        >
+          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-emerald-300">
+            <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Nearby & Local GPS Insights</span>
+          </div>
+          <span className="text-neutral-400 line-clamp-2">
+            Recommend top spots, cafes, and routes near my active coordinates.
+          </span>
+        </button>
+
+        <button
+          onClick={() => onSelectPrompt('Analyze this uploaded image in detail, extract any text or diagram elements, and summarize its key takeaways.')}
+          className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-sky-800/60 transition-all text-xs flex flex-col gap-1 group shadow-xs"
+        >
+          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-sky-300">
+            <Camera className="w-4 h-4 text-sky-400 shrink-0" />
+            <span>Vision & Multimodal Analysis</span>
+          </div>
+          <span className="text-neutral-400 line-clamp-2">
+            Extract diagrams, OCR text, or analyze photos with high precision.
+          </span>
+        </button>
+
+        <button
           onClick={() => onSelectPrompt('Explain the differences between REST and GraphQL with practical code examples in TypeScript.')}
           className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-neutral-700 transition-all text-xs flex flex-col gap-1 group shadow-xs"
         >
-          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-sky-300">
-            <Terminal className="w-4 h-4 text-sky-400 shrink-0" />
+          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-indigo-300">
+            <Terminal className="w-4 h-4 text-indigo-400 shrink-0" />
             <span>Architecture & Code</span>
           </div>
           <span className="text-neutral-400 line-clamp-2">
@@ -373,41 +431,15 @@ const WelcomeHero: React.FC<WelcomeHeroProps> = ({ activeModel, onSelectPrompt }
         </button>
 
         <button
-          onClick={() => onSelectPrompt('Draft a concise project pitch for a modern mobile-first web app with offline-first capabilities.')}
+          onClick={() => onSelectPrompt('Summarize this document, identify the main objectives, risks, and next action items.')}
           className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-neutral-700 transition-all text-xs flex flex-col gap-1 group shadow-xs"
         >
-          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-sky-300">
-            <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
-            <span>Product & Ideation</span>
+          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-amber-300">
+            <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Document & Data Deep Dive</span>
           </div>
           <span className="text-neutral-400 line-clamp-2">
-            Draft a project pitch for a mobile-first app with offline storage.
-          </span>
-        </button>
-
-        <button
-          onClick={() => onSelectPrompt('Write a step-by-step security checklist for deploying web applications to production containers.')}
-          className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-neutral-700 transition-all text-xs flex flex-col gap-1 group shadow-xs"
-        >
-          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-sky-300">
-            <BrainCircuit className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Security & DevOps</span>
-          </div>
-          <span className="text-neutral-400 line-clamp-2">
-            Production container security checklist and hardening best practices.
-          </span>
-        </button>
-
-        <button
-          onClick={() => onSelectPrompt('Help me write a concise, polite follow-up email after a technical interview.')}
-          className="p-3.5 rounded-2xl bg-neutral-900/80 hover:bg-neutral-850 border border-neutral-800/80 hover:border-neutral-700 transition-all text-xs flex flex-col gap-1 group shadow-xs"
-        >
-          <div className="flex items-center gap-2 font-medium text-neutral-200 group-hover:text-sky-300">
-            <Bot className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Executive Writing</span>
-          </div>
-          <span className="text-neutral-400 line-clamp-2">
-            Write a polite, impactful post-interview follow-up note.
+            Analyze PDFs, logs, JSON, or CSVs with deep structured insights.
           </span>
         </button>
       </div>

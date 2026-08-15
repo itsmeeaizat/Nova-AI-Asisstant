@@ -1,7 +1,7 @@
 {
   "name": "Nova AI Assistant",
-  "description": "A modern, mobile-first AI assistant and workspace with real-time conversations, multimodal vision analysis, voice dictation, speech synthesis, and customizable developer endpoints.",
-  "requestFramePermissions": ["microphone"],
+  "description": "A modern, mobile-first AI assistant and workspace with real-time conversations, multimodal vision and image analysis, file uploads, live GPS location awareness, voice dictation, speech synthesis, and customizable developer endpoints.",
+  "requestFramePermissions": ["microphone", "geolocation", "camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
 

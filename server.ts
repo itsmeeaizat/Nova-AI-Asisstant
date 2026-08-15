@@ -21,8 +21,18 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    service: 'Nova AI Assistant Server',
+    service: 'Nova Multi-Model AI Assistant Server',
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+    providersConfigured: {
+      google: Boolean(process.env.GEMINI_API_KEY),
+      anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+      moonshot: Boolean(process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY),
+      openai: Boolean(process.env.OPENAI_API_KEY),
+      deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+      groq: Boolean(process.env.GROQ_API_KEY),
+      openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+      custom: Boolean(process.env.CUSTOM_BASE_URL),
+    },
     timestamp: Date.now(),
   });
 });

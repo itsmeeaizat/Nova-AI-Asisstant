@@ -109,12 +109,25 @@ export const Header: React.FC<HeaderProps> = ({
           {modelDropdownOpen && (
             <div
               id="model-dropdown-menu"
-              className="absolute left-0 top-full mt-2 w-72 sm:w-80 rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+              className="absolute left-0 top-full mt-2 w-80 sm:w-96 rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-[75vh] flex flex-col"
             >
-              <div className="px-2 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-                Select Model
+              <div className="flex items-center justify-between px-2 py-1.5 border-b border-neutral-800/80 mb-2">
+                <span className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+                  Select AI Model & Provider
+                </span>
+                <button
+                  onClick={() => {
+                    setModelDropdownOpen(false);
+                    onOpenSettings('apikeys');
+                  }}
+                  className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-1"
+                >
+                  <Settings className="w-3 h-3" />
+                  <span>Configure Keys</span>
+                </button>
               </div>
-              <div className="space-y-1">
+
+              <div className="space-y-1.5 overflow-y-auto scrollbar-thin pr-1 flex-1">
                 {models.map((m) => {
                   const isSelected = m.id === selectedModel.id;
                   return (
@@ -135,11 +148,21 @@ export const Header: React.FC<HeaderProps> = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-xs sm:text-sm font-medium">{m.name}</span>
-                          {m.badge && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-neutral-800 text-neutral-300 border border-neutral-700/50">
-                              {m.badge}
-                            </span>
-                          )}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                            m.provider === 'anthropic' 
+                              ? 'bg-amber-950/70 text-amber-300 border border-amber-800/50'
+                              : m.provider === 'moonshot'
+                              ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/50'
+                              : m.provider === 'openai'
+                              ? 'bg-emerald-900/40 text-emerald-200 border border-emerald-700/40'
+                              : m.provider === 'deepseek'
+                              ? 'bg-blue-950/70 text-blue-300 border border-blue-800/50'
+                              : m.provider === 'groq'
+                              ? 'bg-orange-950/70 text-orange-300 border border-orange-800/50'
+                              : 'bg-sky-950/70 text-sky-300 border border-sky-800/50'
+                          }`}>
+                            {m.badge || m.providerName}
+                          </span>
                         </div>
                         <p className="text-[11px] text-neutral-400 mt-0.5 line-clamp-1">{m.tagline}</p>
                       </div>

@@ -17,9 +17,16 @@ import {
   RefreshCw, 
   Terminal,
   Cpu,
-  Volume2
+  Volume2,
+  Key,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Sparkles,
+  Server,
+  FileCode
 } from 'lucide-react';
-import { EndpointConfig, SystemPersona, SYSTEM_PERSONAS } from '../config/endpoints';
+import { ApiKeysConfig, EndpointConfig, SystemPersona, SYSTEM_PERSONAS, RAW_DEVELOPER_API_KEYS } from '../config/endpoints';
 import { ApiLogEntry, GenerationSettings } from '../types/chat';
 import { apiService } from '../services/apiService';
 
@@ -29,6 +36,8 @@ interface SettingsModalProps {
   initialTab?: string;
   endpointConfig: EndpointConfig;
   onUpdateEndpointConfig: (cfg: EndpointConfig) => void;
+  apiKeys: ApiKeysConfig;
+  onUpdateApiKeys: (keys: ApiKeysConfig) => void;
   generationSettings: GenerationSettings;
   onUpdateGenerationSettings: (settings: GenerationSettings) => void;
   selectedPersona: SystemPersona;
@@ -43,9 +52,11 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
-  initialTab = 'endpoints',
+  initialTab = 'apikeys',
   endpointConfig,
   onUpdateEndpointConfig,
+  apiKeys,
+  onUpdateApiKeys,
   generationSettings,
   onUpdateGenerationSettings,
   selectedPersona,
@@ -59,8 +70,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = React.useState<string>(initialTab);
   const [logs, setLogs] = React.useState<ApiLogEntry[]>([]);
   const [isPinging, setIsPinging] = React.useState(false);
-  const [pingResult, setPingResult] = React.useState<{ online: boolean; latency: number; hasApiKey: boolean } | null>(null);
+  const [pingResult, setPingResult] = React.useState<{ online: boolean; latency: number; hasApiKey: boolean; providers?: Record<string, boolean> } | null>(null);
   const [copiedLogs, setCopiedLogs] = React.useState(false);
+  const [copiedEnv, setCopiedEnv] = React.useState(false);
+  const [visibleKeys, setVisibleKeys] = React.useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
     if (initialTab) {
@@ -76,6 +89,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const toggleKeyVisibility = (provider: string) => {
+    setVisibleKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
+  };
+
   const handleTestConnection = async () => {
     setIsPinging(true);
     setPingResult(null);
@@ -86,7 +103,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         latency: res.latencyMs,
         hasApiKey: res.hasApiKey,
       });
-      onShowToast(res.online ? `Connected (${res.latencyMs}ms)` : 'Server offline', res.online ? 'success' : 'error');
+      onShowToast(res.online ? `Server Connected (${res.latencyMs}ms)` : 'Server offline', res.online ? 'success' : 'error');
     } catch (err: any) {
       setPingResult({ online: false, latency: 0, hasApiKey: false });
       onShowToast(err.message || 'Connection test failed', 'error');
@@ -102,6 +119,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => setCopiedLogs(false), 2000);
   };
 
+  const handleCopyEnvTemplate = () => {
+    const template = `# AI Studio / Nova AI Assistant Environment Configuration
+GEMINI_API_KEY="${apiKeys.geminiApiKey || ''}"
+ANTHROPIC_API_KEY="${apiKeys.anthropicApiKey || ''}"
+MOONSHOT_API_KEY="${apiKeys.moonshotApiKey || ''}"
+OPENAI_API_KEY="${apiKeys.openaiApiKey || ''}"
+DEEPSEEK_API_KEY="${apiKeys.deepseekApiKey || ''}"
+GROQ_API_KEY="${apiKeys.groqApiKey || ''}"
+OPENROUTER_API_KEY="${apiKeys.openrouterApiKey || ''}"
+CUSTOM_API_KEY="${apiKeys.customApiKey || ''}"
+CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
+`;
+    navigator.clipboard.writeText(template);
+    setCopiedEnv(true);
+    onShowToast('.env configuration copied to clipboard', 'success');
+    setTimeout(() => setCopiedEnv(false), 2000);
+  };
+
   return (
     <div
       id="settings-modal-backdrop"
@@ -115,11 +150,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="px-5 sm:px-6 py-4 border-b border-neutral-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-neutral-800 flex items-center justify-center text-sky-400">
-              <Database className="w-4 h-4" />
+              <Key className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-neutral-100 leading-none">Settings & Architecture</h2>
-              <p className="text-xs text-neutral-400 mt-0.5">Configure endpoints, parameters, and telemetry</p>
+              <h2 className="text-base sm:text-lg font-bold text-neutral-100 leading-none">Settings & AI Models</h2>
+              <p className="text-xs text-neutral-400 mt-0.5">Configure API keys, model parameters, endpoints, and telemetry</p>
             </div>
           </div>
           <button
@@ -135,18 +170,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Tab Navigation */}
         <div className="px-5 sm:px-6 pt-2 border-b border-neutral-800 flex gap-1 overflow-x-auto scrollbar-none shrink-0 bg-neutral-900/50">
           <TabButton
-            id="tab-btn-endpoints"
-            active={activeTab === 'endpoints'}
-            onClick={() => setActiveTab('endpoints')}
-            icon={<Database className="w-4 h-4" />}
-            label="Endpoints & Architecture"
+            id="tab-btn-apikeys"
+            active={activeTab === 'apikeys'}
+            onClick={() => setActiveTab('apikeys')}
+            icon={<Key className="w-4 h-4" />}
+            label="API Keys & Providers"
           />
           <TabButton
             id="tab-btn-parameters"
             active={activeTab === 'parameters'}
             onClick={() => setActiveTab('parameters')}
             icon={<Sliders className="w-4 h-4" />}
-            label="Model Parameters"
+            label="Inference & Voice"
           />
           <TabButton
             id="tab-btn-persona"
@@ -156,11 +191,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             label="Personas & Instructions"
           />
           <TabButton
+            id="tab-btn-endpoints"
+            active={activeTab === 'endpoints'}
+            onClick={() => setActiveTab('endpoints')}
+            icon={<Database className="w-4 h-4" />}
+            label="Endpoints & Architecture"
+          />
+          <TabButton
             id="tab-btn-telemetry"
             active={activeTab === 'telemetry'}
             onClick={() => setActiveTab('telemetry')}
             icon={<Activity className="w-4 h-4" />}
-            label="API Telemetry"
+            label="Telemetry"
             badge={logs.length > 0 ? String(logs.length) : undefined}
           />
           <TabButton
@@ -168,119 +210,192 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             active={activeTab === 'data'}
             onClick={() => setActiveTab('data')}
             icon={<Cpu className="w-4 h-4" />}
-            label="Data & Storage"
+            label="Storage"
           />
         </div>
 
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 scrollbar-thin">
-          {/* TAB 1: ENDPOINTS & ARCHITECTURE */}
-          {activeTab === 'endpoints' && (
-            <div className="space-y-5">
-              <div className="p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          
+          {/* TAB: API KEYS & PROVIDERS */}
+          {activeTab === 'apikeys' && (
+            <div className="space-y-6">
+              {/* Notice Banner */}
+              <div className="p-4 rounded-2xl bg-neutral-950/80 border border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-neutral-200">Server Health & Connection</h3>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Test live connectivity and latency with the backend API routes.
+                  <h3 className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Multi-Provider Key Configuration</span>
+                  </h3>
+                  <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+                    Set keys dynamically in this panel, or in the workspace raw files (<code className="text-sky-300 font-mono">.env</code> or <code className="text-sky-300 font-mono">src/config/endpoints.ts</code>).
                   </p>
                 </div>
                 <button
-                  id="btn-test-api-ping"
-                  onClick={handleTestConnection}
-                  disabled={isPinging}
-                  className="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-neutral-950 font-semibold text-xs transition-all flex items-center gap-1.5 shrink-0"
+                  id="btn-copy-env-snippet"
+                  onClick={handleCopyEnvTemplate}
+                  className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium flex items-center gap-1.5 shrink-0 transition-colors"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin' : ''}`} />
-                  <span>{isPinging ? 'Testing...' : 'Test Connection'}</span>
+                  {copiedEnv ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedEnv ? 'Copied .env' : 'Copy .env snippet'}</span>
                 </button>
               </div>
 
-              {pingResult && (
-                <div
-                  className={`p-3.5 rounded-xl text-xs flex items-center justify-between border ${
-                    pingResult.online
-                      ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
-                      : 'bg-rose-950/40 border-rose-800 text-rose-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${pingResult.online ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
-                    <span>Status: {pingResult.online ? 'Online & Healthy' : 'Offline / Error'}</span>
+              {/* Provider Key Inputs Grid */}
+              <div className="space-y-4">
+                {/* 1. Google Gemini */}
+                <ApiKeyInputCard
+                  id="input-key-gemini"
+                  title="Google Gemini (3.7 Flash, 3.1 Pro, Flash)"
+                  badge="Google AI"
+                  badgeColor="bg-sky-950/70 text-sky-300 border-sky-800/50"
+                  envVarName="GEMINI_API_KEY"
+                  value={apiKeys.geminiApiKey || ''}
+                  onChange={(val) => onUpdateApiKeys({ ...apiKeys, geminiApiKey: val })}
+                  isVisible={Boolean(visibleKeys['gemini'])}
+                  onToggleVisible={() => toggleKeyVisibility('gemini')}
+                  portalUrl="https://aistudio.google.com/app/apikey"
+                  portalLabel="Get Gemini Key"
+                  placeholder="AIzaSy..."
+                />
+
+                {/* 2. Anthropic Claude */}
+                <ApiKeyInputCard
+                  id="input-key-anthropic"
+                  title="Anthropic Claude (3.7 Sonnet, 3.5 Sonnet, Haiku, Opus)"
+                  badge="Anthropic"
+                  badgeColor="bg-amber-950/70 text-amber-300 border-amber-800/50"
+                  envVarName="ANTHROPIC_API_KEY"
+                  value={apiKeys.anthropicApiKey || ''}
+                  onChange={(val) => onUpdateApiKeys({ ...apiKeys, anthropicApiKey: val })}
+                  isVisible={Boolean(visibleKeys['anthropic'])}
+                  onToggleVisible={() => toggleKeyVisibility('anthropic')}
+                  portalUrl="https://console.anthropic.com/settings/keys"
+                  portalLabel="Anthropic Console"
+                  placeholder="sk-ant-api03-..."
+                />
+
+                {/* 3. Moonshot AI / Kimi */}
+                <ApiKeyInputCard
+                  id="input-key-moonshot"
+                  title="Moonshot AI / Kimi (Kimi K3 128k, K1.5 32k)"
+                  badge="Kimi / Moonshot"
+                  badgeColor="bg-emerald-950/70 text-emerald-300 border-emerald-800/50"
+                  envVarName="MOONSHOT_API_KEY"
+                  value={apiKeys.moonshotApiKey || ''}
+                  onChange={(val) => onUpdateApiKeys({ ...apiKeys, moonshotApiKey: val })}
+                  isVisible={Boolean(visibleKeys['moonshot'])}
+                  onToggleVisible={() => toggleKeyVisibility('moonshot')}
+                  portalUrl="https://platform.moonshot.cn/console/api-keys"
+                  portalLabel="Moonshot Console"
+                  placeholder="sk-..."
+                />
+
+                {/* 4. OpenAI */}
+                <ApiKeyInputCard
+                  id="input-key-openai"
+                  title="OpenAI (GPT-4o, GPT-4o Mini, o1, o3-mini)"
+                  badge="OpenAI"
+                  badgeColor="bg-emerald-900/40 text-emerald-200 border-emerald-700/40"
+                  envVarName="OPENAI_API_KEY"
+                  value={apiKeys.openaiApiKey || ''}
+                  onChange={(val) => onUpdateApiKeys({ ...apiKeys, openaiApiKey: val })}
+                  isVisible={Boolean(visibleKeys['openai'])}
+                  onToggleVisible={() => toggleKeyVisibility('openai')}
+                  portalUrl="https://platform.openai.com/api-keys"
+                  portalLabel="OpenAI Platform"
+                  placeholder="sk-proj-..."
+                />
+
+                {/* 5. DeepSeek */}
+                <ApiKeyInputCard
+                  id="input-key-deepseek"
+                  title="DeepSeek (DeepSeek R1 Reasoning, DeepSeek V3)"
+                  badge="DeepSeek"
+                  badgeColor="bg-blue-950/70 text-blue-300 border-blue-800/50"
+                  envVarName="DEEPSEEK_API_KEY"
+                  value={apiKeys.deepseekApiKey || ''}
+                  onChange={(val) => onUpdateApiKeys({ ...apiKeys, deepseekApiKey: val })}
+                  isVisible={Boolean(visibleKeys['deepseek'])}
+                  onToggleVisible={() => toggleKeyVisibility('deepseek')}
+                  portalUrl="https://platform.deepseek.com/api_keys"
+                  portalLabel="DeepSeek Platform"
+                  placeholder="sk-..."
+                />
+
+                {/* 6. Groq / OpenRouter */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <ApiKeyInputCard
+                    id="input-key-groq"
+                    title="Groq (Llama 3.3 70B 500tok/s)"
+                    badge="Groq"
+                    badgeColor="bg-orange-950/70 text-orange-300 border-orange-800/50"
+                    envVarName="GROQ_API_KEY"
+                    value={apiKeys.groqApiKey || ''}
+                    onChange={(val) => onUpdateApiKeys({ ...apiKeys, groqApiKey: val })}
+                    isVisible={Boolean(visibleKeys['groq'])}
+                    onToggleVisible={() => toggleKeyVisibility('groq')}
+                    portalUrl="https://console.groq.com/keys"
+                    portalLabel="Groq Console"
+                    placeholder="gsk_..."
+                  />
+
+                  <ApiKeyInputCard
+                    id="input-key-openrouter"
+                    title="OpenRouter (Universal Router)"
+                    badge="OpenRouter"
+                    badgeColor="bg-purple-950/70 text-purple-300 border-purple-800/50"
+                    envVarName="OPENROUTER_API_KEY"
+                    value={apiKeys.openrouterApiKey || ''}
+                    onChange={(val) => onUpdateApiKeys({ ...apiKeys, openrouterApiKey: val })}
+                    isVisible={Boolean(visibleKeys['openrouter'])}
+                    onToggleVisible={() => toggleKeyVisibility('openrouter')}
+                    portalUrl="https://openrouter.ai/keys"
+                    portalLabel="OpenRouter"
+                    placeholder="sk-or-v1-..."
+                  />
+                </div>
+
+                {/* 7. Custom Endpoint / Ollama / Local */}
+                <div className="p-4 rounded-2xl bg-neutral-950 border border-neutral-850 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Server className="w-4 h-4 text-sky-400" />
+                      <span className="text-xs font-semibold text-neutral-200">Custom / Self-Hosted Endpoint (Ollama / vLLM)</span>
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-neutral-800 text-neutral-300 border border-neutral-700">
+                      OpenAI Compatible
+                    </span>
                   </div>
-                  <div className="flex items-center gap-4 font-mono">
-                    <span>Latency: {pingResult.latency}ms</span>
-                    <span>API Key: {pingResult.hasApiKey ? 'Configured' : 'Missing (Preview mode)'}</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <label className="text-[11px] font-medium text-neutral-400 block mb-1">Base URL</label>
+                      <input
+                        type="text"
+                        value={apiKeys.customBaseUrl || ''}
+                        placeholder="http://localhost:11434/v1"
+                        onChange={(e) => onUpdateApiKeys({ ...apiKeys, customBaseUrl: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-200 font-mono focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-neutral-400 block mb-1">Model Name</label>
+                      <input
+                        type="text"
+                        value={apiKeys.customModelName || ''}
+                        placeholder="llama3.2"
+                        onChange={(e) => onUpdateApiKeys({ ...apiKeys, customModelName: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-200 font-mono focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {/* Endpoint Table */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-                  Configured API Endpoints
-                </h4>
-
-                <div className="space-y-2">
-                  <EndpointRow
-                    method="POST"
-                    path={`${endpointConfig.baseUrl}${endpointConfig.chatEndpoint}`}
-                    description="Chat completion & multimodal vision inference via Gemini"
-                  />
-                  <EndpointRow
-                    method="POST"
-                    path={`${endpointConfig.baseUrl}${endpointConfig.speechEndpoint}`}
-                    description="Text-to-Speech audio synthesis with Gemini TTS models"
-                  />
-                  <EndpointRow
-                    method="GET"
-                    path={`${endpointConfig.baseUrl}${endpointConfig.modelsEndpoint}`}
-                    description="Retrieve available models list and capabilities"
-                  />
-                  <EndpointRow
-                    method="GET"
-                    path={`${endpointConfig.baseUrl}${endpointConfig.healthEndpoint}`}
-                    description="Health check and service status ping"
-                  />
-                </div>
-              </div>
-
-              {/* Base URL and timeout overrides */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
-                    API Base URL Prefix
-                  </label>
-                  <input
-                    type="text"
-                    value={endpointConfig.baseUrl}
-                    onChange={(e) =>
-                      onUpdateEndpointConfig({ ...endpointConfig, baseUrl: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-100 font-mono focus:outline-none focus:border-sky-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
-                    Timeout (Milliseconds)
-                  </label>
-                  <input
-                    type="number"
-                    value={endpointConfig.timeoutMs}
-                    onChange={(e) =>
-                      onUpdateEndpointConfig({
-                        ...endpointConfig,
-                        timeoutMs: parseInt(e.target.value, 10) || 30000,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-100 font-mono focus:outline-none focus:border-sky-500"
-                  />
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: INFERENCE PARAMETERS */}
+          {/* TAB: INFERENCE & VOICE PARAMETERS */}
           {activeTab === 'parameters' && (
             <div className="space-y-5">
               {/* Temperature */}
@@ -340,7 +455,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Thinking Level */}
               <div>
                 <label className="text-xs font-medium text-neutral-200 block mb-2">
-                  Gemini 3 Reasoning / Thinking Level
+                  Extended Reasoning / Thinking Level (Gemini 3, Claude 3.7, DeepSeek R1, Kimi K3)
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['HIGH', 'LOW', 'MINIMAL'] as const).map((lvl) => (
@@ -364,7 +479,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
                 <p className="text-[11px] text-neutral-400 mt-1.5">
-                  HIGH enables deep multi-step step-by-step reasoning tokens for math and architecture.
+                  HIGH enables step-by-step reasoning tokens for Claude 3.7 Sonnet, DeepSeek R1, and Gemini 3 Pro.
                 </p>
               </div>
 
@@ -399,7 +514,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: SYSTEM PERSONAS & INSTRUCTIONS */}
+          {/* TAB: SYSTEM PERSONAS & INSTRUCTIONS */}
           {activeTab === 'persona' && (
             <div className="space-y-4">
               <div>
@@ -449,7 +564,112 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: API TELEMETRY & LOGS */}
+          {/* TAB: ENDPOINTS & ARCHITECTURE */}
+          {activeTab === 'endpoints' && (
+            <div className="space-y-5">
+              <div className="p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-neutral-200">Server Health & Latency Test</h3>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Test live connectivity with the backend multi-model routing endpoints.
+                  </p>
+                </div>
+                <button
+                  id="btn-test-api-ping"
+                  onClick={handleTestConnection}
+                  disabled={isPinging}
+                  className="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-neutral-950 font-semibold text-xs transition-all flex items-center gap-1.5 shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin' : ''}`} />
+                  <span>{isPinging ? 'Testing...' : 'Test Connection'}</span>
+                </button>
+              </div>
+
+              {pingResult && (
+                <div
+                  className={`p-3.5 rounded-xl text-xs flex items-center justify-between border ${
+                    pingResult.online
+                      ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
+                      : 'bg-rose-950/40 border-rose-800 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${pingResult.online ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                    <span>Status: {pingResult.online ? 'Online & Multi-Model Ready' : 'Offline / Error'}</span>
+                  </div>
+                  <div className="flex items-center gap-4 font-mono">
+                    <span>Latency: {pingResult.latency}ms</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Endpoint Table */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                  Configured API Endpoints
+                </h4>
+
+                <div className="space-y-2">
+                  <EndpointRow
+                    method="POST"
+                    path={`${endpointConfig.baseUrl}${endpointConfig.chatEndpoint}`}
+                    description="Multi-model chat completion & vision (Gemini, Claude, Kimi, OpenAI, DeepSeek, Groq)"
+                  />
+                  <EndpointRow
+                    method="POST"
+                    path={`${endpointConfig.baseUrl}${endpointConfig.speechEndpoint}`}
+                    description="Text-to-Speech audio synthesis with Gemini TTS models"
+                  />
+                  <EndpointRow
+                    method="GET"
+                    path={`${endpointConfig.baseUrl}${endpointConfig.modelsEndpoint}`}
+                    description="Retrieve available models catalogue and specs"
+                  />
+                  <EndpointRow
+                    method="GET"
+                    path={`${endpointConfig.baseUrl}${endpointConfig.healthEndpoint}`}
+                    description="Health check and active provider status ping"
+                  />
+                </div>
+              </div>
+
+              {/* Base URL and timeout overrides */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
+                    API Base URL Prefix
+                  </label>
+                  <input
+                    type="text"
+                    value={endpointConfig.baseUrl}
+                    onChange={(e) =>
+                      onUpdateEndpointConfig({ ...endpointConfig, baseUrl: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-100 font-mono focus:outline-none focus:border-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
+                    Timeout (Milliseconds)
+                  </label>
+                  <input
+                    type="number"
+                    value={endpointConfig.timeoutMs}
+                    onChange={(e) =>
+                      onUpdateEndpointConfig({
+                        ...endpointConfig,
+                        timeoutMs: parseInt(e.target.value, 10) || 45000,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-100 font-mono focus:outline-none focus:border-sky-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: API TELEMETRY & LOGS */}
           {activeTab === 'telemetry' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -515,7 +735,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 5: DATA & STORAGE */}
+          {/* TAB: DATA & STORAGE */}
           {activeTab === 'data' && (
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800/80 space-y-3">
@@ -539,7 +759,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div>
                   <h3 className="text-sm font-semibold text-rose-300">Clear Local Storage</h3>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    Permanently wipe all cached conversations, settings, and telemetry from this browser session.
+                    Permanently wipe all cached conversations, saved API keys, and settings from this browser session.
                   </p>
                 </div>
                 <button
@@ -563,6 +783,79 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </div>
   );
 };
+
+interface ApiKeyInputCardProps {
+  id: string;
+  title: string;
+  badge: string;
+  badgeColor: string;
+  envVarName: string;
+  value: string;
+  onChange: (val: string) => void;
+  isVisible: boolean;
+  onToggleVisible: () => void;
+  portalUrl: string;
+  portalLabel: string;
+  placeholder?: string;
+}
+
+const ApiKeyInputCard: React.FC<ApiKeyInputCardProps> = ({
+  id,
+  title,
+  badge,
+  badgeColor,
+  envVarName,
+  value,
+  onChange,
+  isVisible,
+  onToggleVisible,
+  portalUrl,
+  portalLabel,
+  placeholder,
+}) => (
+  <div className="p-3.5 rounded-2xl bg-neutral-950 border border-neutral-850 space-y-2">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-neutral-200">{title}</span>
+        <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono border ${badgeColor}`}>
+          {badge}
+        </span>
+      </div>
+      <a
+        href={portalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[11px] text-sky-400 hover:text-sky-300 flex items-center gap-1 transition-colors"
+      >
+        <span>{portalLabel}</span>
+        <ExternalLink className="w-3 h-3" />
+      </a>
+    </div>
+
+    <div className="relative flex items-center">
+      <input
+        id={id}
+        type={isVisible ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder || `Enter ${envVarName}...`}
+        className="w-full pr-10 pl-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-200 font-mono focus:outline-none focus:border-sky-500 transition-colors"
+      />
+      <button
+        type="button"
+        onClick={onToggleVisible}
+        className="absolute right-2.5 text-neutral-400 hover:text-neutral-200 transition-colors"
+        aria-label={isVisible ? 'Hide key' : 'Show key'}
+      >
+        {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+    <div className="flex items-center justify-between text-[10px] text-neutral-400">
+      <span>Raw env var: <code className="font-mono text-neutral-300">{envVarName}</code></span>
+      <span>{value ? '✓ Key stored in session' : 'Uses .env or simulated fallback'}</span>
+    </div>
+  </div>
+);
 
 interface TabButtonProps {
   id: string;
