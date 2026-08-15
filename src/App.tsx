@@ -1,0 +1,589 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React from 'react';
+import { 
+  AVAILABLE_MODELS, 
+  DEFAULT_ENDPOINT_CONFIG, 
+  EndpointConfig, 
+  ModelOption, 
+  SYSTEM_PERSONAS, 
+  SystemPersona 
+} from './config/endpoints';
+import { Attachment, ChatSession, GenerationSettings, Message } from './types/chat';
+import { apiService } from './services/apiService';
+import { audioService } from './services/audioService';
+import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { ChatArea } from './components/ChatArea';
+import { InputArea } from './components/InputArea';
+import { SettingsModal } from './components/SettingsModal';
+import { ToastContainer, ToastMessage } from './components/Toast';
+
+const STORAGE_KEY_SESSIONS = 'nova_ai_sessions_v1';
+const STORAGE_KEY_SETTINGS = 'nova_ai_settings_v1';
+const STORAGE_KEY_ENDPOINTS = 'nova_ai_endpoints_v1';
+
+export default function App() {
+  // Models & Personas
+  const [models, setModels] = React.useState<ModelOption[]>(AVAILABLE_MODELS);
+  const [selectedModel, setSelectedModel] = React.useState<ModelOption>(AVAILABLE_MODELS[0]);
+  const [personas] = React.useState<SystemPersona[]>(SYSTEM_PERSONAS);
+  const [selectedPersona, setSelectedPersona] = React.useState<SystemPersona>(SYSTEM_PERSONAS[0]);
+  const [customSystemInstruction, setCustomSystemInstruction] = React.useState<string>(SYSTEM_PERSONAS[0].prompt);
+
+  // Settings
+  const [endpointConfig, setEndpointConfig] = React.useState<EndpointConfig>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_ENDPOINTS);
+      return saved ? { ...DEFAULT_ENDPOINT_CONFIG, ...JSON.parse(saved) } : DEFAULT_ENDPOINT_CONFIG;
+    } catch {
+      return DEFAULT_ENDPOINT_CONFIG;
+    }
+  });
+
+  const [generationSettings, setGenerationSettings] = React.useState<GenerationSettings>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
+      return saved
+        ? JSON.parse(saved)
+        : {
+            temperature: 0.7,
+            topP: 0.95,
+            topK: 64,
+            thinkingLevel: 'HIGH',
+            enableWebSearch: false,
+            speechVoice: 'Kore',
+            speechSpeed: 1.0,
+          };
+    } catch {
+      return {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 64,
+        thinkingLevel: 'HIGH',
+        enableWebSearch: false,
+        speechVoice: 'Kore',
+        speechSpeed: 1.0,
+      };
+    }
+  });
+
+  // Sessions & Messages
+  const [sessions, setSessions] = React.useState<ChatSession[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Could not read saved sessions:', e);
+    }
+    const initialSession: ChatSession = {
+      id: Math.random().toString(36).substring(7),
+      title: 'New Conversation',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [],
+      modelId: AVAILABLE_MODELS[0].id,
+      personaId: SYSTEM_PERSONAS[0].id,
+    };
+    return [initialSession];
+  });
+
+  const [activeSessionId, setActiveSessionId] = React.useState<string>(() => sessions[0]?.id || '');
+  const [input, setInput] = React.useState('');
+  const [attachments, setAttachments] = React.useState<Attachment[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [enableWebSearch, setEnableWebSearch] = React.useState(false);
+
+  // UI state
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = React.useState(false);
+  const [settingsTab, setSettingsTab] = React.useState('endpoints');
+  const [serverOnline, setServerOnline] = React.useState(true);
+  const [latencyMs, setLatencyMs] = React.useState(24);
+  const [hasApiKey, setHasApiKey] = React.useState(true);
+  const [toasts, setToasts] = React.useState<ToastMessage[]>([]);
+
+  // Get active session
+  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  const activeMessages = activeSession?.messages || [];
+
+  // Persist sessions to localStorage
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+    } catch (e) {
+      console.warn('Failed to save sessions to localStorage:', e);
+    }
+  }, [sessions]);
+
+  // Persist settings
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(generationSettings));
+    } catch (e) {
+      console.warn('Failed to save settings:', e);
+    }
+  }, [generationSettings]);
+
+  // Persist endpoint config
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ENDPOINTS, JSON.stringify(endpointConfig));
+    } catch (e) {
+      console.warn('Failed to save endpoints:', e);
+    }
+  }, [endpointConfig]);
+
+  // Toast Helper
+  const showToast = (title: string, type: 'success' | 'error' | 'info' = 'info', description?: string) => {
+    const id = Math.random().toString(36).substring(7);
+    setToasts((prev) => [...prev, { id, title, type, description }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // Initial Server Ping & Model Check
+  React.useEffect(() => {
+    let isMounted = true;
+    const checkServer = async () => {
+      try {
+        const health = await apiService.checkHealth(endpointConfig);
+        if (isMounted) {
+          setServerOnline(health.online);
+          setLatencyMs(health.latencyMs);
+          setHasApiKey(health.hasApiKey);
+        }
+
+        const modelList = await apiService.getModels(endpointConfig);
+        if (isMounted && modelList.length > 0) {
+          setModels(modelList);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setServerOnline(false);
+        }
+      }
+    };
+    checkServer();
+    return () => {
+      isMounted = false;
+    };
+  }, [endpointConfig]);
+
+  // Global Keyboard Shortcuts (Cmd+K for new chat, Esc to close modals)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        handleNewChat();
+      }
+      if (e.key === 'Escape') {
+        setSidebarOpen(false);
+        setSettingsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Actions
+  const handleNewChat = () => {
+    const newSession: ChatSession = {
+      id: Math.random().toString(36).substring(7),
+      title: 'New Conversation',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [],
+      modelId: selectedModel.id,
+      personaId: selectedPersona.id,
+    };
+    setSessions((prev) => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
+    setInput('');
+    setAttachments([]);
+    audioService.stop();
+  };
+
+  const handleDeleteSession = (id: string) => {
+    const remaining = sessions.filter((s) => s.id !== id);
+    if (remaining.length === 0) {
+      const freshSession: ChatSession = {
+        id: Math.random().toString(36).substring(7),
+        title: 'New Conversation',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: [],
+        modelId: selectedModel.id,
+        personaId: selectedPersona.id,
+      };
+      setSessions([freshSession]);
+      setActiveSessionId(freshSession.id);
+    } else {
+      setSessions(remaining);
+      if (activeSessionId === id) {
+        setActiveSessionId(remaining[0].id);
+      }
+    }
+    showToast('Conversation deleted', 'info');
+  };
+
+  const handleRenameSession = (id: string, newTitle: string) => {
+    setSessions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, title: newTitle, updatedAt: Date.now() } : s))
+    );
+    showToast('Conversation renamed', 'success');
+  };
+
+  const handleTogglePin = (id: string) => {
+    setSessions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, isPinned: !s.isPinned } : s))
+    );
+  };
+
+  const handleSelectPreset = (promptText: string) => {
+    setInput(promptText);
+  };
+
+  const handleAddAttachment = (att: Attachment) => {
+    setAttachments((prev) => [...prev, att]);
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  // Submit Prompt Handler
+  const handleSendMessage = async () => {
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
+
+    const userText = input.trim();
+    const currentAttachments = [...attachments];
+
+    // Clear input & attachments immediately for responsive UI
+    setInput('');
+    setAttachments([]);
+
+    const userMessage: Message = {
+      id: Math.random().toString(36).substring(7),
+      role: 'user',
+      content: userText,
+      timestamp: Date.now(),
+      attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
+    };
+
+    // Auto generate title for new session from first message
+    const isFirstMessage = activeMessages.length === 0;
+    const sessionTitle = isFirstMessage
+      ? userText.slice(0, 32) + (userText.length > 32 ? '...' : '') || 'Image Analysis'
+      : activeSession.title;
+
+    // Update session with user message
+    const updatedMessages = [...activeMessages, userMessage];
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId
+          ? {
+              ...s,
+              title: sessionTitle,
+              messages: updatedMessages,
+              updatedAt: Date.now(),
+            }
+          : s
+      )
+    );
+
+    setIsLoading(true);
+
+    try {
+      // Build request body
+      const payload = {
+        model: selectedModel.id,
+        messages: updatedMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          attachments: m.attachments?.map((a) => ({
+            mimeType: a.mimeType,
+            base64Data: a.base64Data,
+          })),
+        })),
+        systemInstruction: customSystemInstruction || selectedPersona.prompt,
+        temperature: generationSettings.temperature,
+        topP: generationSettings.topP,
+        thinkingLevel: generationSettings.thinkingLevel,
+        enableWebSearch,
+      };
+
+      const response = await apiService.sendChatMessage(payload, endpointConfig);
+
+      const assistantMessage: Message = {
+        id: Math.random().toString(36).substring(7),
+        role: 'assistant',
+        content: response.text,
+        timestamp: Date.now(),
+        thinking: response.thinking,
+        modelUsed: response.model || selectedModel.name,
+        groundingSources: response.groundingSources,
+        tokensEstimated: response.tokensEstimated,
+      };
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? {
+                ...s,
+                messages: [...updatedMessages, assistantMessage],
+                updatedAt: Date.now(),
+              }
+            : s
+        )
+      );
+    } catch (err: any) {
+      console.error('Inference error:', err);
+      const errorMessage: Message = {
+        id: Math.random().toString(36).substring(7),
+        role: 'assistant',
+        content: `**Request Error**: ${err.message || 'Failed to fetch model response'}. Please check your connection or developer settings.`,
+        timestamp: Date.now(),
+        error: err.message,
+        modelUsed: selectedModel.name,
+      };
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? {
+                ...s,
+                messages: [...updatedMessages, errorMessage],
+                updatedAt: Date.now(),
+              }
+            : s
+        )
+      );
+
+      showToast(err.message || 'Inference error', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStopGenerating = () => {
+    setIsLoading(false);
+    showToast('Generation stopped', 'info');
+  };
+
+  const handleRegenerateMessage = (index: number) => {
+    if (index < 0 || isLoading) return;
+    // Find preceding messages up to that point
+    const historyUntilUser = activeMessages.slice(0, index);
+    if (historyUntilUser.length === 0) return;
+
+    // Reset messages and trigger re-send
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId
+          ? {
+              ...s,
+              messages: historyUntilUser,
+              updatedAt: Date.now(),
+            }
+          : s
+      )
+    );
+
+    // Call API with historyUntilUser
+    setIsLoading(true);
+    const payload = {
+      model: selectedModel.id,
+      messages: historyUntilUser.map((m) => ({
+        role: m.role,
+        content: m.content,
+        attachments: m.attachments?.map((a) => ({
+          mimeType: a.mimeType,
+          base64Data: a.base64Data,
+        })),
+      })),
+      systemInstruction: customSystemInstruction || selectedPersona.prompt,
+      temperature: generationSettings.temperature,
+      topP: generationSettings.topP,
+      thinkingLevel: generationSettings.thinkingLevel,
+      enableWebSearch,
+    };
+
+    apiService
+      .sendChatMessage(payload, endpointConfig)
+      .then((response) => {
+        const assistantMessage: Message = {
+          id: Math.random().toString(36).substring(7),
+          role: 'assistant',
+          content: response.text,
+          timestamp: Date.now(),
+          thinking: response.thinking,
+          modelUsed: response.model || selectedModel.name,
+          groundingSources: response.groundingSources,
+          tokensEstimated: response.tokensEstimated,
+        };
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSessionId
+              ? {
+                  ...s,
+                  messages: [...historyUntilUser, assistantMessage],
+                  updatedAt: Date.now(),
+                }
+              : s
+          )
+        );
+      })
+      .catch((err) => {
+        showToast(err.message || 'Regeneration failed', 'error');
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  };
+
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const handleExportData = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(sessions, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `nova_ai_conversations_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    showToast('Export downloaded successfully', 'success');
+  };
+
+  const handleClearAllData = () => {
+    localStorage.removeItem(STORAGE_KEY_SESSIONS);
+    localStorage.removeItem(STORAGE_KEY_SETTINGS);
+    localStorage.removeItem(STORAGE_KEY_ENDPOINTS);
+    const freshSession: ChatSession = {
+      id: Math.random().toString(36).substring(7),
+      title: 'New Conversation',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [],
+      modelId: AVAILABLE_MODELS[0].id,
+      personaId: SYSTEM_PERSONAS[0].id,
+    };
+    setSessions([freshSession]);
+    setActiveSessionId(freshSession.id);
+    setInput('');
+    setAttachments([]);
+    setSettingsModalOpen(false);
+  };
+
+  return (
+    <div id="app-root-container" className="h-full flex flex-col bg-neutral-950 text-neutral-100 antialiased overflow-hidden">
+      {/* Toast Alert System */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Main Top Header */}
+      <Header
+        models={models}
+        selectedModel={selectedModel}
+        onSelectModel={setSelectedModel}
+        personas={personas}
+        selectedPersona={selectedPersona}
+        onSelectPersona={(p) => {
+          setSelectedPersona(p);
+          setCustomSystemInstruction(p.prompt);
+          showToast(`Persona switched to ${p.name}`, 'info');
+        }}
+        onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+        onOpenSettings={(tab) => {
+          if (tab) setSettingsTab(tab);
+          setSettingsModalOpen(true);
+        }}
+        onNewChat={handleNewChat}
+        serverOnline={serverOnline}
+        latencyMs={latencyMs}
+        hasApiKey={hasApiKey}
+      />
+
+      {/* Workspace Body (Sidebar + Chat Area + Input) */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Navigation Sidebar Drawer */}
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={(id) => {
+            setActiveSessionId(id);
+            audioService.stop();
+          }}
+          onNewChat={handleNewChat}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={handleRenameSession}
+          onTogglePin={handleTogglePin}
+          onSelectPreset={handleSelectPreset}
+          onOpenSettings={(tab) => {
+            if (tab) setSettingsTab(tab);
+            setSettingsModalOpen(true);
+          }}
+        />
+
+        {/* Center Main Stage */}
+        <main className="flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
+          <ChatArea
+            messages={activeMessages}
+            isLoading={isLoading}
+            activeModel={selectedModel}
+            onSelectPromptPreset={handleSelectPreset}
+            onRegenerateMessage={handleRegenerateMessage}
+            onCopyText={handleCopyText}
+            onShowToast={showToast}
+          />
+
+          <InputArea
+            input={input}
+            onInputChange={setInput}
+            onSubmit={handleSendMessage}
+            onStop={handleStopGenerating}
+            isLoading={isLoading}
+            attachments={attachments}
+            onAddAttachment={handleAddAttachment}
+            onRemoveAttachment={handleRemoveAttachment}
+            enableWebSearch={enableWebSearch}
+            onToggleWebSearch={() => setEnableWebSearch((prev) => !prev)}
+            onShowToast={showToast}
+          />
+        </main>
+      </div>
+
+      {/* Developer & Architecture Settings Modal */}
+      <SettingsModal
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        initialTab={settingsTab}
+        endpointConfig={endpointConfig}
+        onUpdateEndpointConfig={setEndpointConfig}
+        generationSettings={generationSettings}
+        onUpdateGenerationSettings={setGenerationSettings}
+        selectedPersona={selectedPersona}
+        onSelectPersona={setSelectedPersona}
+        customSystemInstruction={customSystemInstruction}
+        onUpdateCustomSystemInstruction={setCustomSystemInstruction}
+        onExportData={handleExportData}
+        onClearAllData={handleClearAllData}
+        onShowToast={showToast}
+      />
+    </div>
+  );
+}
