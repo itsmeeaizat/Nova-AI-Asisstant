@@ -14,9 +14,12 @@ import {
   Bot,
   Plus,
   Radio,
-  Volume2
+  Volume2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { ModelOption, SystemPersona } from '../config/endpoints';
+import { useTheme } from '../context/ThemeContext';
 
 interface HeaderProps {
   models: ModelOption[];
@@ -57,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   isSpeakingAudio,
   onStopAudio,
 }) => {
+  const { theme, toggleTheme } = useTheme();
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false);
   const [personaDropdownOpen, setPersonaDropdownOpen] = React.useState(false);
 
@@ -77,7 +81,14 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header id="main-header" className="h-14 sm:h-16 border-b border-neutral-800/80 bg-neutral-950/80 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30 shrink-0 select-none">
+    <header 
+      id="main-header" 
+      className={`h-14 sm:h-16 border-b px-3 sm:px-6 flex items-center justify-between z-30 shrink-0 select-none transition-colors ${
+        theme === 'light' 
+          ? 'bg-white/90 border-neutral-200 text-neutral-900 shadow-xs' 
+          : 'bg-neutral-950/80 border-neutral-800/80 text-neutral-100 backdrop-blur-md'
+      }`}
+    >
       {/* Left section: Sidebar toggle & Brand / Model picker */}
       <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         <button
@@ -191,25 +202,29 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             id="btn-persona-selector"
             onClick={() => setPersonaDropdownOpen(!personaDropdownOpen)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-neutral-900/60 hover:bg-neutral-900 border border-neutral-800/80 text-xs text-neutral-300 hover:text-neutral-100 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-neutral-900/60 hover:bg-neutral-900 border border-neutral-800/80 text-xs text-neutral-300 hover:text-neutral-100 transition-colors group"
+            title="Pilih Karakter Persona AI"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span className="font-medium text-neutral-300">{selectedPersona.name}</span>
-            <ChevronDown className="w-3 h-3 text-neutral-400" />
+            <span className="text-xs">
+              {selectedPersona.id === 'gen_z' ? '⚡' : selectedPersona.id === 'anak_kecil' ? '🧸' : selectedPersona.id === 'introvert' ? '🌙' : selectedPersona.id === 'developer' ? '💻' : selectedPersona.id === 'creative' ? '🎨' : selectedPersona.id === 'analyst' ? '📊' : '🤖'}
+            </span>
+            <span className="font-medium text-neutral-200">{selectedPersona.name}</span>
+            <ChevronDown className="w-3 h-3 text-neutral-400 group-hover:text-neutral-200" />
           </button>
 
           {personaDropdownOpen && (
             <div
               id="persona-dropdown-menu"
-              className="absolute left-0 top-full mt-2 w-64 rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl p-2 z-50"
+              className="absolute left-0 top-full mt-2 w-72 rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100"
             >
-              <div className="px-2 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
-                <span>Persona & Prompt</span>
-                <span className="text-[10px] text-emerald-400 font-medium">🇮🇩 Wajib ID</span>
+              <div className="px-2 py-1.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center justify-between border-b border-neutral-800/80 mb-1">
+                <span>Preset Persona AI</span>
+                <span className="text-[10px] text-emerald-400 font-medium">🇮🇩 Bahasa ID</span>
               </div>
               <div className="space-y-1">
                 {personas.map((p) => {
                   const isSelected = p.id === selectedPersona.id;
+                  const emoji = p.id === 'gen_z' ? '⚡' : p.id === 'anak_kecil' ? '🧸' : p.id === 'introvert' ? '🌙' : p.id === 'developer' ? '💻' : p.id === 'creative' ? '🎨' : p.id === 'analyst' ? '📊' : '🤖';
                   return (
                     <button
                       key={p.id}
@@ -218,12 +233,24 @@ export const Header: React.FC<HeaderProps> = ({
                         onSelectPersona(p);
                         setPersonaDropdownOpen(false);
                       }}
-                      className={`w-full text-left p-2 rounded-xl transition-colors text-xs flex flex-col ${
-                        isSelected ? 'bg-neutral-800 text-white font-medium' : 'text-neutral-300 hover:bg-neutral-850'
+                      className={`w-full text-left p-2 rounded-xl transition-colors text-xs flex flex-col gap-0.5 ${
+                        isSelected 
+                          ? 'bg-neutral-800 text-white font-medium border border-neutral-700/60' 
+                          : 'text-neutral-300 hover:bg-neutral-850'
                       }`}
                     >
-                      <span className="font-medium">{p.name}</span>
-                      <span className="text-[11px] text-neutral-400">{p.role}</span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs">{emoji}</span>
+                          <span className="font-semibold text-neutral-100">{p.name}</span>
+                        </div>
+                        {p.badge && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-neutral-950 border border-neutral-800 text-neutral-400 font-medium">
+                            {p.badge}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-neutral-400 line-clamp-1">{p.role}</span>
                     </button>
                   );
                 })}
@@ -238,7 +265,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className="w-full text-left px-2 py-1.5 rounded-lg text-sky-400 hover:bg-neutral-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Kustomisasi Prompt & Bahasa...</span>
+                  <span>Kustomisasi Prompt & Persona...</span>
                 </button>
               </div>
             </div>
@@ -321,6 +348,25 @@ export const Header: React.FC<HeaderProps> = ({
           title="Inference & Model Parameters"
         >
           <Sliders className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+        </button>
+
+        {/* Theme Toggle Button (Light / Dark) */}
+        <button
+          id="btn-toggle-theme"
+          onClick={toggleTheme}
+          className={`p-2 sm:p-2.5 rounded-xl transition-colors ${
+            theme === 'light'
+              ? 'text-neutral-700 hover:bg-neutral-100'
+              : 'text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900'
+          }`}
+          aria-label="Toggle theme (Light / Dark)"
+          title={theme === 'light' ? 'Ganti ke Mode Gelap' : 'Ganti ke Tema Putih (Light Mode)'}
+        >
+          {theme === 'light' ? (
+            <Moon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-neutral-700" />
+          ) : (
+            <Sun className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
+          )}
         </button>
 
         {/* Global Developer & Architecture Settings Button */}

@@ -169,27 +169,13 @@ export const LiveVoiceOverlay: React.FC<LiveVoiceOverlayProps> = ({
   const handleProcessSpeechInput = async (spokenText: string) => {
     if (!spokenText.trim() || isProcessing) return;
     setIsProcessing(true);
-    setStatusMessage(`Sedang berpikir dengan ${activeModel.name}...`);
+    setStatusMessage(`Sedang memproses respons suara bersama ${activeModel.name}...`);
 
     try {
       const responseText = await onSendMessage(spokenText);
       if (responseText) {
         setLatestAiResponse(responseText);
-        setStatusMessage('Mensintesis suara neural...');
-        
-        // Speak using the active Neural Voice Engine (Gemini Live / OpenAI / ElevenLabs)
-        await audioService.speakMessage(
-          responseText,
-          {
-            provider: voiceSettings.provider,
-            voice: voiceSettings.voiceId,
-            speed: voiceSettings.speed,
-            emotion: voiceSettings.emotion,
-            apiKeys,
-          },
-          'live-mode'
-        );
-        setStatusMessage('Menyuarakan respons...');
+        setStatusMessage('Merespons melalui suara percakapan...');
       }
     } catch (err: any) {
       setStatusMessage(`Gagal: ${err.message || 'Gagal memproses suara'}`);

@@ -18,11 +18,14 @@ import {
   FileText,
   Loader2,
   UploadCloud,
-  Volume2
+  Volume2,
+  Terminal,
+  Code
 } from 'lucide-react';
 import { Attachment, GeoLocationData } from '../types/chat';
 import { LocationCard } from './LocationCard';
 import { ImageLightbox } from './ImageLightbox';
+import { useTheme } from '../context/ThemeContext';
 
 interface InputAreaProps {
   input: string;
@@ -39,6 +42,10 @@ interface InputAreaProps {
   isLocating: boolean;
   enableWebSearch: boolean;
   onToggleWebSearch: () => void;
+  enableCodingMode?: boolean;
+  onToggleCodingMode?: () => void;
+  enableDeepWeb?: boolean;
+  onToggleDeepWeb?: () => void;
   autoPlaySpeech?: boolean;
   onToggleAutoPlaySpeech?: () => void;
   onShowToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -59,10 +66,15 @@ export const InputArea: React.FC<InputAreaProps> = ({
   isLocating,
   enableWebSearch,
   onToggleWebSearch,
+  enableCodingMode,
+  onToggleCodingMode,
+  enableDeepWeb,
+  onToggleDeepWeb,
   autoPlaySpeech,
   onToggleAutoPlaySpeech,
   onShowToast,
 }) => {
+  const { theme } = useTheme();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
@@ -221,7 +233,11 @@ export const InputArea: React.FC<InputAreaProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className="p-3 sm:p-4 bg-neutral-950/95 border-t border-neutral-900 shrink-0 select-none relative"
+        className={`p-3 sm:p-4 border-t shrink-0 select-none relative ${
+          theme === 'light'
+            ? 'bg-neutral-50 border-neutral-200 text-neutral-900'
+            : 'bg-neutral-950/95 border-neutral-900 text-neutral-100'
+        }`}
       >
         {/* Drag & Drop Visual Overlay */}
         {isDraggingOver && (
@@ -306,7 +322,11 @@ export const InputArea: React.FC<InputAreaProps> = ({
           )}
 
           {/* Input Box Wrapper */}
-          <div className="relative flex flex-col rounded-2xl bg-neutral-900/90 border border-neutral-800 focus-within:border-neutral-700 shadow-xl transition-all">
+          <div className={`relative flex flex-col rounded-2xl border transition-all ${
+            theme === 'light'
+              ? 'bg-white border-neutral-300 focus-within:border-sky-500 shadow-sm'
+              : 'bg-neutral-900/90 border-neutral-800 focus-within:border-neutral-700 shadow-xl'
+          }`}>
             {/* Main Textarea */}
             <textarea
               id="chat-prompt-input"
@@ -322,7 +342,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
                   ? 'Tanyakan sesuatu tentang berkas / gambar yang dilampirkan...'
                   : 'Ketik pesan untuk Nova atau tanyakan apa saja...'
               }
-              className="w-full bg-transparent px-4 py-3.5 text-sm text-neutral-100 placeholder-neutral-400 focus:outline-none resize-none max-h-44 min-h-[48px] leading-relaxed scrollbar-thin"
+              className={`w-full bg-transparent px-4 py-3.5 text-sm focus:outline-none resize-none max-h-44 min-h-[48px] leading-relaxed scrollbar-thin ${
+                theme === 'light' ? 'text-neutral-900 placeholder:text-neutral-400' : 'text-neutral-100 placeholder:text-neutral-400'
+              }`}
             />
 
             {/* Bottom Toolbar inside input container */}
@@ -469,7 +491,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                   </button>
                 )}
 
-                {/* Button: Web search grounding */}
+                {/* Button: Web search grounding (Browser) */}
                 <button
                   id="btn-toggle-search-grounding"
                   type="button"
@@ -479,11 +501,58 @@ export const InputArea: React.FC<InputAreaProps> = ({
                       ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40 font-medium'
                       : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
                   }`}
-                  title="Search web grounding"
+                  title="Search Web / Live Internet Grounding"
+                  aria-label="Toggle web search"
                 >
                   <Globe className="w-3.5 h-3.5" />
                   <span className="text-[11px] hidden sm:inline">Search</span>
                 </button>
+
+                {/* Button: Coding Mode Toggle */}
+                {onToggleCodingMode && (
+                  <button
+                    id="btn-toggle-coding-mode"
+                    type="button"
+                    onClick={onToggleCodingMode}
+                    className={`px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 transition-all ${
+                      enableCodingMode
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 font-medium shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                        : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                    }`}
+                    title={
+                      enableCodingMode
+                        ? 'Mode Coding: AKTIF (AI membuat project lengkap sampai selesai, bukan hanya 1 baris kode). Klik untuk menonaktifkan.'
+                        : 'Mode Coding: NONAKTIF. Klik untuk mengaktifkan mode pembuat project lengkap.'
+                    }
+                    aria-label="Toggle Coding Mode"
+                  >
+                    <Code className={`w-3.5 h-3.5 ${enableCodingMode ? 'text-emerald-400' : ''}`} />
+                    <span className="text-[11px] hidden sm:inline">Coding</span>
+                  </button>
+                )}
+
+                {/* Button: Deep Mode Toggle */}
+                {onToggleDeepWeb && (
+                  <button
+                    id="btn-toggle-deep-web"
+                    type="button"
+                    onClick={onToggleDeepWeb}
+                    className={`px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 transition-all ${
+                      enableDeepWeb
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50 font-medium shadow-[0_0_12px_rgba(168,85,247,0.2)]'
+                        : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+                    }`}
+                    title={
+                      enableDeepWeb
+                        ? 'Mode Deep: AKTIF (Analisis mendalam & riset tingkat lanjut). Klik untuk menonaktifkan.'
+                        : 'Mode Deep: NONAKTIF. Klik untuk mengaktifkan mode Deep.'
+                    }
+                    aria-label="Toggle Deep mode"
+                  >
+                    <Terminal className={`w-3.5 h-3.5 ${enableDeepWeb ? 'text-purple-400' : ''}`} />
+                    <span className="text-[11px] hidden sm:inline">Deep</span>
+                  </button>
+                )}
               </div>
 
               {/* Right controls: Submit / Stop & Character estimate */}

@@ -21,13 +21,21 @@ import {
   Globe,
   FileText,
   MapPin,
-  Camera
+  Camera,
+  Search,
+  X,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { Attachment, Message, VoiceSettings } from '../types/chat';
 import { ModelOption, ApiKeysConfig } from '../config/endpoints';
 import { audioService } from '../services/audioService';
 import { LocationCard } from './LocationCard';
 import { ImageLightbox } from './ImageLightbox';
+import { PlaceMapList } from './PlaceMapCard';
+import { extractPlacesFromMessage } from '../utils/placeExtractor';
+import { useTheme } from '../context/ThemeContext';
+import { TypewriterText } from './TypewriterText';
 
 interface ChatAreaProps {
   messages: Message[];
@@ -52,6 +60,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onCopyText,
   onShowToast,
 }) => {
+  const { theme } = useTheme();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const [copiedCodeId, setCopiedCodeId] = React.useState<string | null>(null);
@@ -60,6 +69,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [isLoadingSpeech, setIsLoadingSpeech] = React.useState(false);
   const [showScrollBottom, setShowScrollBottom] = React.useState(false);
   const [lightboxAttachment, setLightboxAttachment] = React.useState<Attachment | null>(null);
+
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const [matchCursor, setMatchCursor] = React.useState(0);
+
+  const matchingMessages = React.useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return messages
+      .map((m, idx) => ({ message: m, index: idx }))
+      .filter(({ message }) => message.content.toLowerCase().includes(q));
+  }, [messages, searchQuery]);
+
+  const handleJumpToMatch = (dir: 'next' | 'prev') => {
+    if (matchingMessages.length === 0) return;
+    let nextIdx = dir === 'next' ? matchCursor + 1 : matchCursor - 1;
+    if (nextIdx >= matchingMessages.length) nextIdx = 0;
+    if (nextIdx < 0) nextIdx = matchingMessages.length - 1;
+    setMatchCursor(nextIdx);
+
+    const targetMsg = matchingMessages[nextIdx];
+    if (targetMsg) {
+      const el = document.getElementById(`message-bubble-${targetMsg.message.id || targetMsg.index}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  };
 
   // Subscribe to audio state
   React.useEffect(() => {
@@ -132,7 +170,85 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   return (
-    <div className="flex-1 relative flex flex-col h-full overflow-hidden bg-neutral-950">
+    <div className={`flex-1 relative flex flex-col h-full overflow-hidden ${theme === 'light' ? 'bg-white text-neutral-900' : 'bg-neutral-950 text-neutral-100'}`}>
+      {/* Top Search Bar & Toggle */}
+      <div className="absolute top-3 right-4 sm:right-8 z-20 flex items-center gap-2">
+        {!isSearchOpen ? (
+          <button
+            type="button"
+            onClick={() => {
+              setIsSearchOpen(true);
+              setTimeout(() => searchInputRef.current?.focus(), 100);
+            }}
+            className={`p-2 rounded-xl border shadow-sm transition-all flex items-center gap-1.5 text-xs font-medium ${
+              theme === 'light'
+                ? 'bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50'
+                : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
+            }`}
+            title="Cari pesan dalam percakapan"
+            aria-label="Cari pesan"
+          >
+            <Search className="w-4 h-4 text-sky-500" />
+            <span className="hidden sm:inline">Cari Pesan</span>
+          </button>
+        ) : (
+          <div className={`p-2 rounded-2xl border shadow-lg flex items-center gap-2 w-72 sm:w-80 animate-in fade-in zoom-in-95 duration-150 ${
+            theme === 'light'
+              ? 'bg-white/95 backdrop-blur-md border-neutral-300 text-neutral-900'
+              : 'bg-neutral-900/95 backdrop-blur-md border-neutral-700 text-neutral-100'
+          }`}>
+            <Search className="w-4 h-4 text-sky-500 shrink-0 ml-1" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setMatchCursor(0);
+              }}
+              placeholder="Cari kata di pesan..."
+              className="bg-transparent border-none outline-none text-xs w-full placeholder:text-neutral-400"
+            />
+            {searchQuery && (
+              <span className="text-[10px] text-neutral-400 shrink-0">
+                {matchingMessages.length > 0 ? `${matchCursor + 1}/${matchingMessages.length}` : '0/0'}
+              </span>
+            )}
+            {matchingMessages.length > 0 && (
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleJumpToMatch('prev')}
+                  className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors"
+                  title="Pesan sebelumnya"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleJumpToMatch('next')}
+                  className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors"
+                  title="Pesan berikutnya"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSearchOpen(false);
+                setSearchQuery('');
+              }}
+              className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors text-neutral-400 hover:text-neutral-200 ml-0.5"
+              title="Tutup pencarian"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Scrollable Message List */}
       <div
         id="messages-scroll-container"
@@ -150,6 +266,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             const isAssistant = msg.role === 'assistant';
             const isUser = msg.role === 'user';
             const isMsgSpeaking = isSpeaking && activeSpeechId === msg.id;
+            const detectedPlaces = isAssistant ? extractPlacesFromMessage(msg.content) : [];
 
             return (
               <div
@@ -180,7 +297,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         return (
                           <div
                             key={att.id}
-                            className="p-1.5 rounded-xl bg-neutral-900/90 border border-neutral-800 flex items-center gap-2 max-w-xs shadow-xs hover:border-neutral-700 transition-all"
+                            className={`p-1.5 rounded-xl border flex items-center gap-2 max-w-xs shadow-xs transition-all ${
+                              theme === 'light'
+                                ? 'bg-neutral-100 border-neutral-300 text-neutral-800'
+                                : 'bg-neutral-900/90 border-neutral-800 text-neutral-200'
+                            }`}
                           >
                             {isImage ? (
                               <button
@@ -201,7 +322,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               </div>
                             )}
                             <div className="flex flex-col min-w-0 pr-2">
-                              <span className="text-xs font-medium text-neutral-200 truncate">{att.name}</span>
+                              <span className="text-xs font-medium truncate">{att.name}</span>
                               <span className="text-[10px] text-neutral-400">
                                 {(att.size / 1024).toFixed(1)} KB &bull; {att.mimeType.split('/')[1] || 'file'}
                               </span>
@@ -226,8 +347,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <div
                     className={`p-3.5 sm:p-5 rounded-2xl transition-all leading-relaxed text-sm ${
                       isUser
-                        ? 'bg-sky-600/90 text-white rounded-tr-xs shadow-md selection:bg-sky-400 selection:text-neutral-950 font-normal'
-                        : 'bg-neutral-900/90 border border-neutral-800/90 text-neutral-100 rounded-tl-xs shadow-md'
+                        ? theme === 'light'
+                          ? 'bg-white border border-neutral-300 text-neutral-900 rounded-tr-xs shadow-md font-medium'
+                          : 'bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-tr-xs shadow-md font-medium'
+                        : theme === 'light'
+                          ? 'bg-neutral-100 border border-neutral-200 text-neutral-900 rounded-tl-xs shadow-sm'
+                          : 'bg-neutral-900/90 border border-neutral-800/90 text-neutral-100 rounded-tl-xs shadow-md'
                     }`}
                   >
                     {/* Assistant Thinking Section if any */}
@@ -240,10 +365,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                     {/* Formatted Markdown Content */}
                     <div className="break-words space-y-3 font-normal leading-relaxed">
-                      {renderFormattedContent(msg.content, (codeId, code) =>
-                        handleCopyCodeBlock(codeId, code)
+                      {isAssistant && isLoading && index === messages.length - 1 && !msg.content ? (
+                        <div className="flex items-center gap-2 py-2 text-neutral-400 text-xs italic">
+                          <span className="inline-flex gap-1">
+                            <span className="w-2 h-2 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                            <span className="w-2 h-2 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                            <span className="w-2 h-2 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                          </span>
+                          <span>Nova sedang merumuskan jawaban...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <TypewriterText
+                            content={msg.content}
+                            isStreaming={isAssistant && isLoading && index === messages.length - 1}
+                            renderFormatted={(text) =>
+                              renderFormattedContent(text, (codeId, code) =>
+                                handleCopyCodeBlock(codeId, code)
+                              )
+                            }
+                          />
+                          {isAssistant && isLoading && index === messages.length - 1 && (
+                            <span className="inline-block w-2.5 h-4 ml-1 bg-sky-400 animate-cursor-blink rounded-xs align-middle" />
+                          )}
+                        </>
                       )}
                     </div>
+
+                    {/* Google Maps Tourist Place Cards & Previews */}
+                    {isAssistant && detectedPlaces.length > 0 && (
+                      <PlaceMapList
+                        places={detectedPlaces}
+                        onShowToast={onShowToast}
+                      />
+                    )}
 
                     {/* Grounding Sources / Citations */}
                     {isAssistant && msg.groundingSources && msg.groundingSources.length > 0 && (

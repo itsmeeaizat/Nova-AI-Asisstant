@@ -25,6 +25,7 @@ import { InputArea } from './components/InputArea';
 import { SettingsModal } from './components/SettingsModal';
 import { LiveVoiceOverlay } from './components/LiveVoiceOverlay';
 import { ToastContainer, ToastMessage } from './components/Toast';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 const STORAGE_KEY_SESSIONS = 'nova_ai_sessions_v1';
 const STORAGE_KEY_SETTINGS = 'nova_ai_settings_v1';
@@ -33,6 +34,15 @@ const STORAGE_KEY_APIKEYS = 'nova_ai_apikeys_v1';
 const STORAGE_KEY_CUSTOM_INSTRUCTION = 'nova_ai_custom_instruction_v1';
 
 export default function App() {
+  return (
+    <ThemeProvider>
+      <MainAppContent />
+    </ThemeProvider>
+  );
+}
+
+function MainAppContent() {
+  const { theme } = useTheme();
   // Models & Personas
   const [models, setModels] = React.useState<ModelOption[]>(AVAILABLE_MODELS);
   const [selectedModel, setSelectedModel] = React.useState<ModelOption>(AVAILABLE_MODELS[0]);
@@ -188,6 +198,34 @@ export default function App() {
   const [isLocating, setIsLocating] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [enableWebSearch, setEnableWebSearch] = React.useState(false);
+  const [enableDeepWeb, setEnableDeepWeb] = React.useState(false);
+  const [enableCodingMode, setEnableCodingMode] = React.useState(false);
+
+  const handleToggleCodingMode = () => {
+    setEnableCodingMode((prev) => {
+      const willBeActive = !prev;
+      showToast(
+        willBeActive
+          ? 'Mode Coding: AKTIF (AI akan membuat proyek lengkap sampai selesai, bukan hanya 1 baris kode)'
+          : 'Mode Coding: NONAKTIF',
+        willBeActive ? 'success' : 'info'
+      );
+      return willBeActive;
+    });
+  };
+
+  const handleToggleDeepWeb = () => {
+    setEnableDeepWeb((prev) => {
+      const willBeActive = !prev;
+      showToast(
+        willBeActive
+          ? 'Mode Deep Web: AKTIF (Investigasi mendalam, riset data tersembunyi & analisis multi-sumber)'
+          : 'Mode Deep Web: NONAKTIF',
+        willBeActive ? 'success' : 'info'
+      );
+      return willBeActive;
+    });
+  };
 
   // UI state
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
@@ -198,6 +236,7 @@ export default function App() {
   const [latencyMs, setLatencyMs] = React.useState(24);
   const [hasApiKey, setHasApiKey] = React.useState(true);
   const [toasts, setToasts] = React.useState<ToastMessage[]>([]);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
 
   // Get active session
   const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
@@ -397,8 +436,7 @@ export default function App() {
     setLocation(null);
     showToast('GPS location removed from context', 'info');
   };
-
-  // Submit Prompt Handler
+  // Submit Prompt Handler (Streaming Text + Instant Real-Time Voice)
   const handleSendMessage = async () => {
     if ((!input.trim() && attachments.length === 0 && !location) || isLoading) return;
 
@@ -409,7 +447,6 @@ export default function App() {
     // Clear input & attachments immediately for responsive UI
     setInput('');
     setAttachments([]);
-    // Note: We keep or clear location? Let's keep location active or clear per preference; clearing lets user control per prompt
     setLocation(null);
 
     const userMessage: Message = {
@@ -427,8 +464,17 @@ export default function App() {
       ? (userText ? userText.slice(0, 32) + (userText.length > 32 ? '...' : '') : currentLocation ? `Near ${currentLocation.city || 'GPS Location'}` : 'Image Analysis')
       : activeSession.title;
 
-    // Update session with user message
-    const updatedMessages = [...activeMessages, userMessage];
+    const assistantMsgId = Math.random().toString(36).substring(7);
+    const initialAssistantMessage: Message = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      modelUsed: selectedModel.name,
+    };
+
+    // Update session with user message and empty streaming placeholder
+    const updatedMessages = [...activeMessages, userMessage, initialAssistantMessage];
     setSessions((prev) =>
       prev.map((s) =>
         s.id === activeSessionId
@@ -444,11 +490,43 @@ export default function App() {
 
     setIsLoading(true);
 
+    const autoReadEnabled = generationSettings.voiceSettings?.autoPlayReplies ?? true;
+    if (autoReadEnabled) {
+      audioService.startStreamSession(
+        assistantMsgId,
+        {
+          provider: generationSettings.voiceSettings?.provider || 'gemini',
+          voice: generationSettings.voiceSettings?.voiceId || generationSettings.speechVoice || 'Kore',
+          speed: generationSettings.voiceSettings?.speed || generationSettings.speechSpeed || 1.0,
+          emotion: generationSettings.voiceSettings?.emotion || 'natural',
+          apiKeys,
+        },
+        endpointConfig
+      );
+    }
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
+      let effectiveSystemInstruction = customSystemInstruction || selectedPersona.prompt;
+      if (enableCodingMode) {
+        effectiveSystemInstruction = `${effectiveSystemInstruction}\n\n[MODE CODING AKTIF - FULL PROJECT BUILDER]:
+- Buat dan tulis kode proyek secara LENGKAP, UTUH, dan SELESAI dari awal hingga tuntas (full source code, semua file, komponen, struktur direktori, logic, dan styling lengkap).
+- Jangan pernah memberikan hanya 1 baris kode, placeholder, atau potongan kode parsial (jangan tulis // TODO atau kode terpotong).
+- Pastikan kode dapat langsung dijalankan, bersih, modular, dan production-ready dalam Bahasa Indonesia.`;
+      }
+      if (enableDeepWeb) {
+        effectiveSystemInstruction = `${effectiveSystemInstruction}\n\n[MODE DEEP WEB & DEEP RESEARCH AKTIF]:
+- Lakukan analisis dan riset investigatif mendalam (deep research) dengan presisi tinggi, arsitektur teknis, intelijen siber, serta sintesis data komprehensif.
+- Gali wawasan teknis, analisis protokol terdesentralisasi, kriptografi, OSINT, serta verifikasi silang data tanpa batasan informasi permukaan.
+- Sajikan jawaban mendalam, berbasis fakta konkret, terstruktur rapi dengan poin-poin analitis yang tajam dalam Bahasa Indonesia.`;
+      }
+
       // Build request body
       const payload = {
         model: selectedModel.id,
-        messages: updatedMessages.map((m) => ({
+        messages: updatedMessages.slice(0, -1).map((m) => ({
           role: m.role,
           content: m.content,
           attachments: m.attachments?.map((a) => ({
@@ -457,99 +535,134 @@ export default function App() {
           })),
           location: m.location,
         })),
-        systemInstruction: customSystemInstruction || selectedPersona.prompt,
+        systemInstruction: effectiveSystemInstruction,
         temperature: generationSettings.temperature,
         topP: generationSettings.topP,
         thinkingLevel: generationSettings.thinkingLevel,
-        enableWebSearch,
+        enableWebSearch: enableWebSearch || enableDeepWeb,
+        enableDeepWeb,
         apiKeys,
         location: currentLocation || undefined,
       };
 
-      const response = await apiService.sendChatMessage(payload, endpointConfig);
+      const response = await apiService.sendChatMessageStream(
+        payload,
+        (deltaText, accumulatedText, meta) => {
+          // Push text delta to audio stream queue for instant sentence-by-sentence voice synthesis!
+          if (autoReadEnabled && deltaText) {
+            audioService.pushStreamChunk(deltaText);
+          }
 
-      const assistantMessage: Message = {
-        id: Math.random().toString(36).substring(7),
-        role: 'assistant',
-        content: response.text,
-        timestamp: Date.now(),
-        thinking: response.thinking,
-        modelUsed: response.model || selectedModel.name,
-        groundingSources: response.groundingSources,
-        tokensEstimated: response.tokensEstimated,
-      };
-
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === activeSessionId
-            ? {
-                ...s,
-                messages: [...updatedMessages, assistantMessage],
-                updatedAt: Date.now(),
-              }
-            : s
-        )
-      );
-
-      // Auto-Read Voice: Automatically speak the AI response if enabled
-      const autoReadEnabled = generationSettings.voiceSettings?.autoPlayReplies ?? true;
-      if (autoReadEnabled && response.text) {
-        setTimeout(() => {
-          audioService
-            .speakMessage(
-              response.text,
-              {
-                provider: generationSettings.voiceSettings?.provider || 'gemini',
-                voice: generationSettings.voiceSettings?.voiceId || generationSettings.speechVoice || 'Kore',
-                speed: generationSettings.voiceSettings?.speed || generationSettings.speechSpeed || 1.0,
-                emotion: generationSettings.voiceSettings?.emotion || 'natural',
-                apiKeys,
-              },
-              assistantMessage.id,
-              endpointConfig
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === activeSessionId
+                ? {
+                    ...s,
+                    messages: s.messages.map((m) =>
+                      m.id === assistantMsgId
+                        ? {
+                            ...m,
+                            content: accumulatedText,
+                            thinking: meta?.thinking || m.thinking,
+                            groundingSources: meta?.groundingSources || m.groundingSources,
+                          }
+                        : m
+                    ),
+                  }
+                : s
             )
-            .catch((err) => console.warn('Auto-read audio error:', err));
-        }, 150);
+          );
+        },
+        endpointConfig,
+        abortController.signal
+      );
+
+      if (autoReadEnabled) {
+        audioService.finishStream();
       }
-    } catch (err: any) {
-      console.error('Inference error:', err);
-      const errorMessage: Message = {
-        id: Math.random().toString(36).substring(7),
-        role: 'assistant',
-        content: `**Request Error**: ${err.message || 'Failed to fetch model response'}. Please check your connection or developer settings.`,
-        timestamp: Date.now(),
-        error: err.message,
-        modelUsed: selectedModel.name,
-      };
 
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
             ? {
                 ...s,
-                messages: [...updatedMessages, errorMessage],
+                messages: s.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        content: response.text,
+                        thinking: response.thinking,
+                        modelUsed: response.model || selectedModel.name,
+                        groundingSources: response.groundingSources,
+                        tokensEstimated: response.tokensEstimated,
+                      }
+                    : m
+                ),
                 updatedAt: Date.now(),
               }
             : s
         )
       );
-
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        showToast('Generasi dihentikan', 'info');
+        return;
+      }
+      console.error('Inference error:', err);
+      if (autoReadEnabled) {
+        audioService.stop();
+      }
+      const errorMessageText = `**Request Error**: ${err.message || 'Failed to fetch model response'}. Please check your connection or developer settings.`;
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? {
+                ...s,
+                messages: s.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        content: errorMessageText,
+                        error: err.message,
+                      }
+                    : m
+                ),
+                updatedAt: Date.now(),
+              }
+            : s
+        )
+      );
       showToast(err.message || 'Inference error', 'error');
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
   const handleStopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    audioService.stop();
     setIsLoading(false);
-    showToast('Generation stopped', 'info');
+    showToast('Generasi dan suara dihentikan', 'info');
   };
 
-  const handleRegenerateMessage = (index: number) => {
+  const handleRegenerateMessage = async (index: number) => {
     if (index < 0 || isLoading) return;
     // Find preceding messages up to that point
     const historyUntilUser = activeMessages.slice(0, index);
     if (historyUntilUser.length === 0) return;
+
+    const assistantMsgId = Math.random().toString(36).substring(7);
+    const initialAssistantMessage: Message = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      modelUsed: selectedModel.name,
+    };
 
     // Reset messages and trigger re-send
     setSessions((prev) =>
@@ -557,15 +670,32 @@ export default function App() {
         s.id === activeSessionId
           ? {
               ...s,
-              messages: historyUntilUser,
+              messages: [...historyUntilUser, initialAssistantMessage],
               updatedAt: Date.now(),
             }
           : s
       )
     );
 
-    // Call API with historyUntilUser
     setIsLoading(true);
+    const autoReadEnabled = generationSettings.voiceSettings?.autoPlayReplies ?? true;
+    if (autoReadEnabled) {
+      audioService.startStreamSession(
+        assistantMsgId,
+        {
+          provider: generationSettings.voiceSettings?.provider || 'gemini',
+          voice: generationSettings.voiceSettings?.voiceId || generationSettings.speechVoice || 'Kore',
+          speed: generationSettings.voiceSettings?.speed || generationSettings.speechSpeed || 1.0,
+          emotion: generationSettings.voiceSettings?.emotion || 'natural',
+          apiKeys,
+        },
+        endpointConfig
+      );
+    }
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     const payload = {
       model: selectedModel.id,
       messages: historyUntilUser.map((m) => ({
@@ -585,40 +715,74 @@ export default function App() {
       apiKeys,
     };
 
-    apiService
-      .sendChatMessage(payload, endpointConfig)
-      .then((response) => {
-        const assistantMessage: Message = {
-          id: Math.random().toString(36).substring(7),
-          role: 'assistant',
-          content: response.text,
-          timestamp: Date.now(),
-          thinking: response.thinking,
-          modelUsed: response.model || selectedModel.name,
-          groundingSources: response.groundingSources,
-          tokensEstimated: response.tokensEstimated,
-        };
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === activeSessionId
-              ? {
-                  ...s,
-                  messages: [...historyUntilUser, assistantMessage],
-                  updatedAt: Date.now(),
-                }
-              : s
-          )
-        );
-      })
-      .catch((err) => {
+    try {
+      const response = await apiService.sendChatMessageStream(
+        payload,
+        (deltaText, accumulatedText, meta) => {
+          if (autoReadEnabled && deltaText) {
+            audioService.pushStreamChunk(deltaText);
+          }
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === activeSessionId
+                ? {
+                    ...s,
+                    messages: s.messages.map((m) =>
+                      m.id === assistantMsgId
+                        ? {
+                            ...m,
+                            content: accumulatedText,
+                            thinking: meta?.thinking || m.thinking,
+                            groundingSources: meta?.groundingSources || m.groundingSources,
+                          }
+                        : m
+                    ),
+                  }
+                : s
+            )
+          );
+        },
+        endpointConfig,
+        abortController.signal
+      );
+
+      if (autoReadEnabled) {
+        audioService.finishStream();
+      }
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? {
+                ...s,
+                messages: s.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        content: response.text,
+                        thinking: response.thinking,
+                        modelUsed: response.model || selectedModel.name,
+                        groundingSources: response.groundingSources,
+                        tokensEstimated: response.tokensEstimated,
+                      }
+                    : m
+                ),
+                updatedAt: Date.now(),
+              }
+            : s
+        )
+      );
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
         showToast(err.message || 'Regeneration failed', 'error');
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
   };
 
-  // Real-Time Live Voice Conversation Handler
+  // Real-Time Live Voice Conversation Handler with Instant Streaming Speech
   const handleLiveVoiceSendMessage = async (userText: string): Promise<string> => {
     if (!userText.trim()) return '';
 
@@ -634,7 +798,16 @@ export default function App() {
       ? userText.slice(0, 32) + (userText.length > 32 ? '...' : '')
       : activeSession.title;
 
-    const updatedMessages = [...activeMessages, userMessage];
+    const assistantMsgId = Math.random().toString(36).substring(7);
+    const initialAssistantMessage: Message = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      modelUsed: selectedModel.name,
+    };
+
+    const updatedMessages = [...activeMessages, userMessage, initialAssistantMessage];
     setSessions((prev) =>
       prev.map((s) =>
         s.id === activeSessionId
@@ -648,9 +821,22 @@ export default function App() {
       )
     );
 
+    // Immediately boot audio stream for live voice mode!
+    audioService.startStreamSession(
+      assistantMsgId,
+      {
+        provider: generationSettings.voiceSettings?.provider || 'gemini',
+        voice: generationSettings.voiceSettings?.voiceId || generationSettings.speechVoice || 'Kore',
+        speed: generationSettings.voiceSettings?.speed || generationSettings.speechSpeed || 1.0,
+        emotion: generationSettings.voiceSettings?.emotion || 'natural',
+        apiKeys,
+      },
+      endpointConfig
+    );
+
     const payload = {
       model: selectedModel.id,
-      messages: updatedMessages.map((m) => ({
+      messages: updatedMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
       })),
@@ -662,22 +848,44 @@ export default function App() {
       apiKeys,
     };
 
-    const response = await apiService.sendChatMessage(payload, endpointConfig);
+    const response = await apiService.sendChatMessageStream(
+      payload,
+      (deltaText, accumulatedText) => {
+        if (deltaText) {
+          audioService.pushStreamChunk(deltaText);
+        }
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSessionId
+              ? {
+                  ...s,
+                  messages: s.messages.map((m) =>
+                    m.id === assistantMsgId ? { ...m, content: accumulatedText } : m
+                  ),
+                }
+              : s
+          )
+        );
+      },
+      endpointConfig
+    );
 
-    const assistantMessage: Message = {
-      id: Math.random().toString(36).substring(7),
-      role: 'assistant',
-      content: response.text,
-      timestamp: Date.now(),
-      modelUsed: response.model || selectedModel.name,
-    };
+    audioService.finishStream();
 
     setSessions((prev) =>
       prev.map((s) =>
         s.id === activeSessionId
           ? {
               ...s,
-              messages: [...updatedMessages, assistantMessage],
+              messages: s.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      content: response.text,
+                      modelUsed: response.model || selectedModel.name,
+                    }
+                  : m
+              ),
               updatedAt: Date.now(),
             }
           : s
@@ -725,7 +933,14 @@ export default function App() {
   };
 
   return (
-    <div id="app-root-container" className="h-full flex flex-col bg-neutral-950 text-neutral-100 antialiased overflow-hidden">
+    <div 
+      id="app-root-container" 
+      className={`h-full flex flex-col antialiased overflow-hidden transition-colors ${
+        theme === 'light' 
+          ? 'bg-white text-neutral-900' 
+          : 'bg-neutral-950 text-neutral-100'
+      }`}
+    >
       {/* Toast Alert System */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
@@ -809,6 +1024,10 @@ export default function App() {
             isLocating={isLocating}
             enableWebSearch={enableWebSearch}
             onToggleWebSearch={() => setEnableWebSearch((prev) => !prev)}
+            enableCodingMode={enableCodingMode}
+            onToggleCodingMode={handleToggleCodingMode}
+            enableDeepWeb={enableDeepWeb}
+            onToggleDeepWeb={handleToggleDeepWeb}
             autoPlaySpeech={generationSettings.voiceSettings?.autoPlayReplies ?? true}
             onToggleAutoPlaySpeech={handleToggleAutoPlaySpeech}
             onShowToast={showToast}

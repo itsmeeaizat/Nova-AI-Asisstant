@@ -13,13 +13,10 @@ import {
   Edit3, 
   Check, 
   X, 
-  Settings, 
-  Sparkles, 
-  Database,
-  Compass
+  Sparkles
 } from 'lucide-react';
 import { ChatSession } from '../types/chat';
-import { PROMPT_PRESETS } from '../config/endpoints';
+import { useTheme } from '../context/ThemeContext';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -31,7 +28,7 @@ interface SidebarProps {
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newTitle: string) => void;
   onTogglePin: (id: string) => void;
-  onSelectPreset: (promptText: string) => void;
+  onSelectPreset?: (promptText: string) => void;
   onOpenSettings: (tab?: string) => void;
 }
 
@@ -48,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectPreset,
   onOpenSettings,
 }) => {
+  const { theme } = useTheme();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState('');
@@ -94,19 +92,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Sidebar Drawer */}
       <aside
         id="app-sidebar"
-        className={`fixed lg:static top-0 bottom-0 left-0 z-40 w-76 sm:w-80 bg-neutral-950 border-r border-neutral-850 flex flex-col transition-transform duration-300 ease-in-out shrink-0 select-none ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
+        className={`fixed lg:static top-0 bottom-0 left-0 z-40 w-76 sm:w-80 flex flex-col transition-transform duration-300 ease-in-out shrink-0 select-none ${
+          theme === 'light' 
+            ? 'bg-neutral-50 border-r border-neutral-200 text-neutral-900' 
+            : 'bg-neutral-950 border-r border-neutral-850 text-neutral-100'
+        } ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Top brand & New Chat Button */}
-        <div className="p-4 border-b border-neutral-900 flex flex-col gap-3">
+        <div className={`p-4 border-b flex flex-col gap-3 ${theme === 'light' ? 'border-neutral-200' : 'border-neutral-900'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-md">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-bold text-neutral-100 tracking-tight leading-none">Nova AI</span>
+                <span className={`text-sm font-bold tracking-tight leading-none ${theme === 'light' ? 'text-neutral-900' : 'text-neutral-100'}`}>Nova AI</span>
                 <span className="text-[10px] font-mono text-neutral-400">Assistant & Workspace</span>
               </div>
             </div>
@@ -114,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               id="btn-close-sidebar-mobile"
               onClick={onClose}
-              className="lg:hidden p-2 rounded-xl text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
+              className={`lg:hidden p-2 rounded-xl text-neutral-400 hover:text-neutral-200 ${theme === 'light' ? 'hover:bg-neutral-200' : 'hover:bg-neutral-900'}`}
               aria-label="Close sidebar"
             >
               <X className="w-5 h-5" />
@@ -127,13 +127,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onNewChat();
               if (window.innerWidth < 1024) onClose();
             }}
-            className="w-full py-2.5 px-3.5 rounded-xl bg-neutral-900 hover:bg-neutral-850 active:bg-neutral-800 border border-neutral-800 text-neutral-100 flex items-center justify-between font-medium text-xs sm:text-sm transition-all shadow-xs group"
+            className={`w-full py-2.5 px-3.5 rounded-xl flex items-center justify-between font-medium text-xs sm:text-sm transition-all shadow-xs group ${
+              theme === 'light'
+                ? 'bg-white hover:bg-neutral-100 active:bg-neutral-200 border border-neutral-300 text-neutral-900'
+                : 'bg-neutral-900 hover:bg-neutral-850 active:bg-neutral-800 border border-neutral-800 text-neutral-100'
+            }`}
           >
             <div className="flex items-center gap-2">
-              <Plus className="w-4 h-4 text-sky-400 group-hover:rotate-90 transition-transform" />
+              <Plus className="w-4 h-4 text-sky-500 group-hover:rotate-90 transition-transform" />
               <span>Obrolan Baru</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700/50 font-mono">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${theme === 'light' ? 'bg-neutral-100 text-neutral-600 border border-neutral-300' : 'bg-neutral-800 text-neutral-400 border border-neutral-700/50'}`}>
               ⌘K
             </span>
           </button>
@@ -149,7 +153,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari riwayat obrolan..."
-              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-neutral-900/80 border border-neutral-800/80 text-xs text-neutral-200 placeholder-neutral-400 focus:outline-none focus:border-sky-500/50 transition-colors"
+              className={`w-full pl-9 pr-3 py-1.5 rounded-xl text-xs placeholder-neutral-400 focus:outline-none transition-colors ${
+                theme === 'light'
+                  ? 'bg-white border border-neutral-300 text-neutral-900 focus:border-sky-500'
+                  : 'bg-neutral-900/80 border border-neutral-800/80 text-neutral-200 focus:border-sky-500/50'
+              }`}
             />
             {searchQuery && (
               <button
@@ -242,56 +250,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </div>
-
-          {/* Prompt Presets Section */}
-          <div className="pt-2">
-            <div className="px-2 pb-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
-              <Compass className="w-3 h-3 text-sky-400" />
-              <span>Pilihan Prompt Cepat</span>
-            </div>
-            <div className="space-y-1">
-              {PROMPT_PRESETS.map((preset, idx) => (
-                <button
-                  key={idx}
-                  id={`btn-preset-${idx}`}
-                  onClick={() => {
-                    onSelectPreset(preset.prompt);
-                    if (window.innerWidth < 1024) onClose();
-                  }}
-                  className="w-full text-left p-2 rounded-xl text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900 text-xs transition-colors flex items-center gap-2 group"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-neutral-400 group-hover:text-sky-400 shrink-0" />
-                  <span className="truncate">{preset.title}</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* Footer: Architecture & Endpoints quick info */}
-        <div className="p-3 border-t border-neutral-900 bg-neutral-950 flex flex-col gap-2">
-          <button
-            id="btn-sidebar-endpoints-cfg"
-            onClick={() => onOpenSettings('endpoints')}
-            className="w-full p-2 rounded-xl bg-neutral-900/60 hover:bg-neutral-900 border border-neutral-800/80 text-neutral-300 flex items-center justify-between text-xs transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Database className="w-3.5 h-3.5 text-sky-400" />
-              <span className="font-medium">API Endpoints</span>
-            </div>
-            <span className="text-[10px] text-neutral-400 font-mono">/api/*</span>
-          </button>
-
-          <div className="flex items-center justify-between px-1 text-[11px] text-neutral-400">
-            <span>Conversations: {sessions.length}</span>
-            <button
-              onClick={() => onOpenSettings('telemetry')}
-              className="hover:text-neutral-200 transition-colors flex items-center gap-1"
-            >
-              <Settings className="w-3 h-3" />
-              <span>Telemetry</span>
-            </button>
-          </div>
+        {/* Footer: Session status */}
+        <div className="p-3 border-t border-neutral-900 bg-neutral-950 flex items-center justify-between text-[11px] text-neutral-400">
+          <span>{sessions.length} Percakapan</span>
+          <span className="text-[10px] text-neutral-400">Tersimpan</span>
         </div>
       </aside>
     </>
@@ -325,9 +289,11 @@ const SessionItem: React.FC<SessionItemProps> = ({
   onDelete,
   onTogglePin,
 }) => {
+  const { theme } = useTheme();
+
   if (isEditing) {
     return (
-      <div className="p-1.5 rounded-xl bg-neutral-900 border border-neutral-700 flex items-center gap-1">
+      <div className={`p-1.5 rounded-xl border flex items-center gap-1 ${theme === 'light' ? 'bg-white border-neutral-300 text-neutral-900' : 'bg-neutral-900 border-neutral-700 text-neutral-100'}`}>
         <input
           type="text"
           value={editTitle}
@@ -337,18 +303,18 @@ const SessionItem: React.FC<SessionItemProps> = ({
             if (e.key === 'Escape') onCancelRename(e as any);
           }}
           autoFocus
-          className="flex-1 bg-transparent text-xs text-neutral-100 px-1 focus:outline-none"
+          className="flex-1 bg-transparent text-xs px-1 focus:outline-none"
         />
         <button
           onClick={onSaveRename}
-          className="p-1 text-emerald-400 hover:bg-neutral-800 rounded"
+          className={`p-1 text-emerald-500 rounded ${theme === 'light' ? 'hover:bg-neutral-100' : 'hover:bg-neutral-800'}`}
           aria-label="Save title"
         >
           <Check className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onCancelRename}
-          className="p-1 text-neutral-400 hover:bg-neutral-800 rounded"
+          className={`p-1 text-neutral-400 rounded ${theme === 'light' ? 'hover:bg-neutral-100' : 'hover:bg-neutral-800'}`}
           aria-label="Cancel editing"
         >
           <X className="w-3.5 h-3.5" />
@@ -363,8 +329,12 @@ const SessionItem: React.FC<SessionItemProps> = ({
       onClick={onSelect}
       className={`group w-full p-2 rounded-xl text-left cursor-pointer transition-all flex items-center justify-between gap-2 text-xs ${
         isActive
-          ? 'bg-neutral-850 text-white font-medium border border-neutral-750/70 shadow-xs'
-          : 'text-neutral-400 hover:bg-neutral-900/80 hover:text-neutral-200'
+          ? theme === 'light'
+            ? 'bg-sky-50 text-sky-900 font-medium border border-sky-200 shadow-xs'
+            : 'bg-neutral-850 text-white font-medium border border-neutral-750/70 shadow-xs'
+          : theme === 'light'
+            ? 'text-neutral-600 hover:bg-neutral-200/70 hover:text-neutral-900'
+            : 'text-neutral-400 hover:bg-neutral-900/80 hover:text-neutral-200'
       }`}
     >
       <div className="flex items-center gap-2 min-w-0 flex-1">

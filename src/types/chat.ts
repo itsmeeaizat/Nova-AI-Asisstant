@@ -85,6 +85,7 @@ export interface GenerationSettings {
   topK: number;
   thinkingLevel: 'HIGH' | 'LOW' | 'MINIMAL';
   enableWebSearch: boolean;
+  enableDeepWeb?: boolean;
   enforceIndonesian?: boolean;
   voiceSettings?: VoiceSettings;
   speechVoice?: string;
@@ -96,7 +97,7 @@ export interface ApiLogEntry {
   timestamp: number;
   endpoint: string;
   method: string;
-  status: number | 'PENDING' | 'FAILED';
+  status: number | 'PENDING' | 'STREAMING' | 'FAILED';
   durationMs?: number;
   requestPayload?: unknown;
   responsePayload?: unknown;
@@ -120,6 +121,7 @@ export interface ChatRequestBody {
   topP?: number;
   thinkingLevel?: 'HIGH' | 'LOW' | 'MINIMAL';
   enableWebSearch?: boolean;
+  enableDeepWeb?: boolean;
   apiKeys?: ApiKeysConfig;
 }
 

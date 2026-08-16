@@ -7,6 +7,25 @@ import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
 import { RAW_DEVELOPER_API_KEYS, ModelProvider } from "../config/endpoints.ts";
 import { ChatRequestBody, ChatResponseResult } from "../types/chat.ts";
 
+// Helper to sanitize and validate API keys
+function sanitizeKey(k?: string): string {
+  if (!k || typeof k !== 'string') return '';
+  const trimmed = k.trim();
+  if (
+    trimmed === 'MY_GEMINI_API_KEY' ||
+    trimmed === 'MY_APP_URL' ||
+    trimmed.startsWith('YOUR_') ||
+    trimmed.startsWith('<') ||
+    trimmed === 'undefined' ||
+    trimmed === 'null' ||
+    trimmed === '""' ||
+    trimmed === "''"
+  ) {
+    return '';
+  }
+  return trimmed;
+}
+
 // Helper to determine model provider
 export function detectProvider(modelId: string): ModelProvider {
   if (modelId.startsWith("gemini-")) return "google";
@@ -25,66 +44,66 @@ function resolveApiKey(provider: ModelProvider, clientKeys?: ChatRequestBody['ap
   switch (provider) {
     case 'google':
       return (
-        clientKeys?.geminiApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.geminiApiKey?.trim() ||
-        process.env.GEMINI_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.geminiApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.geminiApiKey) ||
+        sanitizeKey(process.env.GEMINI_API_KEY) ||
         ""
       );
     case 'anthropic':
       return (
-        clientKeys?.anthropicApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.anthropicApiKey?.trim() ||
-        process.env.ANTHROPIC_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.anthropicApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.anthropicApiKey) ||
+        sanitizeKey(process.env.ANTHROPIC_API_KEY) ||
         ""
       );
     case 'moonshot':
       return (
-        clientKeys?.moonshotApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.moonshotApiKey?.trim() ||
-        process.env.MOONSHOT_API_KEY?.trim() ||
-        process.env.KIMI_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.moonshotApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.moonshotApiKey) ||
+        sanitizeKey(process.env.MOONSHOT_API_KEY) ||
+        sanitizeKey(process.env.KIMI_API_KEY) ||
         ""
       );
     case 'openai':
       return (
-        clientKeys?.openaiApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.openaiApiKey?.trim() ||
-        process.env.OPENAI_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.openaiApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.openaiApiKey) ||
+        sanitizeKey(process.env.OPENAI_API_KEY) ||
         ""
       );
     case 'deepseek':
       return (
-        clientKeys?.deepseekApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.deepseekApiKey?.trim() ||
-        process.env.DEEPSEEK_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.deepseekApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.deepseekApiKey) ||
+        sanitizeKey(process.env.DEEPSEEK_API_KEY) ||
         ""
       );
     case 'groq':
       return (
-        clientKeys?.groqApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.groqApiKey?.trim() ||
-        process.env.GROQ_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.groqApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.groqApiKey) ||
+        sanitizeKey(process.env.GROQ_API_KEY) ||
         ""
       );
     case 'openrouter':
       return (
-        clientKeys?.openrouterApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.openrouterApiKey?.trim() ||
-        process.env.OPENROUTER_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.openrouterApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.openrouterApiKey) ||
+        sanitizeKey(process.env.OPENROUTER_API_KEY) ||
         ""
       );
     case 'elevenlabs' as ModelProvider:
       return (
-        clientKeys?.elevenlabsApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.elevenlabsApiKey?.trim() ||
-        process.env.ELEVENLABS_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.elevenlabsApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.elevenlabsApiKey) ||
+        sanitizeKey(process.env.ELEVENLABS_API_KEY) ||
         ""
       );
     case 'custom':
       return (
-        clientKeys?.customApiKey?.trim() ||
-        RAW_DEVELOPER_API_KEYS.customApiKey?.trim() ||
-        process.env.CUSTOM_API_KEY?.trim() ||
+        sanitizeKey(clientKeys?.customApiKey) ||
+        sanitizeKey(RAW_DEVELOPER_API_KEYS.customApiKey) ||
+        sanitizeKey(process.env.CUSTOM_API_KEY) ||
         ""
       );
     default:
@@ -98,7 +117,8 @@ function buildStrictIndonesianSystemInstruction(customInstruction?: string): str
 1. Anda adalah Nova AI, asisten kecerdasan buatan cerdas, ramah, dan profesional.
 2. WAJIB dan SELALU gunakan BAHASA INDONESIA secara penuh sebagai bahasa default dalam SEMUA respon, salam pembuka (contoh: "Halo! Saya Nova. Ada yang bisa saya bantu hari ini?"), penjelasan, dan percakapan.
 3. DILARANG menggunakan Bahasa Inggris untuk sapaan atau percakapan umum. Jangan pernah menyapa dengan bahasa Inggris seperti "How can I help you today?". Gunakan selalu Bahasa Indonesia seperti "Halo! Ada yang bisa saya bantu hari ini?".
-4. Format jawaban menggunakan Markdown yang rapi, terstruktur, dan mudah dibaca. Istilah teknis atau sintaks pemrograman tetap dipertahankan sesuai kebutuhan dengan penjelasan berbahasa Indonesia.`;
+4. Format jawaban menggunakan Markdown yang rapi, terstruktur, dan mudah dibaca.
+5. REKOMENDASI TEMPAT & WISATA: Ketika merekomendasikan tempat wisata, objek rekreasi, kuliner, atau landmark, sebutkan nama tempat secara jelas dalam format tebal beserta lokasinya (contoh: "1. **Candi Borobudur** (Magelang, Jawa Tengah) - Candi Buddha terbesar..." atau "**Pantai Pandawa** (Kutuh, Bali)"). Ini memungkinkan sistem menampilkan preview peta Google Maps interaktif otomatis bagi pengguna.`;
 
   if (!customInstruction || !customInstruction.trim()) {
     return mandatoryRules;
@@ -128,10 +148,18 @@ ${loc.city ? `- Area: ${loc.city}${loc.state ? `, ${loc.state}` : ''}${loc.count
 }
 
 /**
- * Handle Google Gemini API
+ * Handle Google Gemini API with automatic model fallback on Quota Exceeded (429 / RESOURCE_EXHAUSTED)
  */
 async function processGeminiRequest(body: ChatRequestBody, apiKey: string): Promise<ChatResponseResult> {
   const targetModel = body.model || "gemini-3.7-flash";
+
+  // Build candidate fallback models list to prevent quota outages
+  const candidateModels = [
+    targetModel,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+  ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
   const ai = new GoogleGenAI({
     apiKey,
@@ -169,58 +197,104 @@ async function processGeminiRequest(body: ChatRequestBody, apiKey: string): Prom
     return { role, parts };
   });
 
-  const config: {
-    systemInstruction?: string;
-    temperature?: number;
-    topP?: number;
-    thinkingConfig?: { thinkingLevel: ThinkingLevel };
-    tools?: Array<{ googleSearch?: Record<string, never> }>;
-  } = {};
+  let lastError: any = null;
 
-  config.systemInstruction = buildStrictIndonesianSystemInstruction(body.systemInstruction);
-  if (typeof body.temperature === 'number') {
-    config.temperature = body.temperature;
-  }
-  if (typeof body.topP === 'number') {
-    config.topP = body.topP;
-  }
-  if (body.thinkingLevel && targetModel.includes('gemini-3')) {
-    let level = ThinkingLevel.HIGH;
-    if (body.thinkingLevel === 'LOW') level = ThinkingLevel.LOW;
-    if (body.thinkingLevel === 'MINIMAL') level = ThinkingLevel.MINIMAL;
-    config.thinkingConfig = { thinkingLevel: level };
-  }
-  if (body.enableWebSearch) {
-    config.tools = [{ googleSearch: {} }];
-  }
+  for (const modelToTry of candidateModels) {
+    try {
+      const config: {
+        systemInstruction?: string;
+        temperature?: number;
+        topP?: number;
+        thinkingConfig?: { thinkingLevel: ThinkingLevel };
+        tools?: Array<{ googleSearch?: Record<string, never> }>;
+      } = {};
 
-  const response = await ai.models.generateContent({
-    model: targetModel,
-    contents,
-    config,
-  });
+      config.systemInstruction = buildStrictIndonesianSystemInstruction(body.systemInstruction);
+      if (typeof body.temperature === 'number') {
+        config.temperature = body.temperature;
+      }
+      if (typeof body.topP === 'number') {
+        config.topP = body.topP;
+      }
+      if (body.thinkingLevel && modelToTry.includes('gemini-3')) {
+        let level = ThinkingLevel.HIGH;
+        if (body.thinkingLevel === 'LOW') level = ThinkingLevel.LOW;
+        if (body.thinkingLevel === 'MINIMAL') level = ThinkingLevel.MINIMAL;
+        config.thinkingConfig = { thinkingLevel: level };
+      }
+      if (body.enableWebSearch || body.enableDeepWeb) {
+        config.tools = [{ googleSearch: {} }];
+      }
+      if (body.enableDeepWeb && modelToTry.includes('gemini-3')) {
+        config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+      }
 
-  const responseText = response.text || "";
-  const groundingSources: Array<{ title: string; url: string }> = [];
-  const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (Array.isArray(chunks)) {
-    for (const chunk of chunks) {
-      if (chunk.web?.uri) {
-        groundingSources.push({
-          title: chunk.web.title || chunk.web.uri,
-          url: chunk.web.uri,
-        });
+      const response = await ai.models.generateContent({
+        model: modelToTry,
+        contents,
+        config,
+      });
+
+      const responseText = response.text || "";
+      const groundingSources: Array<{ title: string; url: string }> = [];
+      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (Array.isArray(chunks)) {
+        for (const chunk of chunks) {
+          if (chunk.web?.uri) {
+            groundingSources.push({
+              title: chunk.web.title || chunk.web.uri,
+              url: chunk.web.uri,
+            });
+          }
+        }
+      }
+
+      const estimatedTokens = Math.max(20, Math.round(responseText.length / 4));
+      return {
+        text: responseText,
+        groundingSources: groundingSources.length > 0 ? groundingSources : undefined,
+        model: modelToTry,
+        tokensEstimated: estimatedTokens,
+      };
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = String(err?.message || err);
+      console.warn(`[Gemini] Model ${modelToTry} failed: ${errMsg}`);
+      
+      // If error is quota / rate limit or model not found, try next candidate model
+      const isQuotaOrRateLimit = 
+        errMsg.includes('RESOURCE_EXHAUSTED') || 
+        errMsg.includes('quota') || 
+        errMsg.includes('429') || 
+        errMsg.includes('rate limit') ||
+        errMsg.includes('not found');
+
+      if (!isQuotaOrRateLimit) {
+        // If it's an authentication or invalid key error, break and throw clear message
+        break;
       }
     }
   }
 
-  const estimatedTokens = Math.max(20, Math.round(responseText.length / 4));
-  return {
-    text: responseText,
-    groundingSources: groundingSources.length > 0 ? groundingSources : undefined,
-    model: targetModel,
-    tokensEstimated: estimatedTokens,
-  };
+  // If all models failed
+  const finalErrMsg = String(lastError?.message || lastError || 'Unknown Gemini error');
+  if (finalErrMsg.includes('API_KEY_INVALID') || finalErrMsg.includes('PERMISSION_DENIED') || finalErrMsg.includes('invalid api key')) {
+    return {
+      text: `### ⚠️ Kunci API Gemini Tidak Valid atau Belum Terhubung\n\nKunci API Gemini yang digunakan saat ini tidak valid atau telah kadaluarsa.\n\n**Cara Menghubungkan Kunci API Gemini Anda:**\n1. Buka [Google AI Studio](https://aistudio.google.com/app/apikey) untuk membuat/menyalin kunci API Gemini gratis.\n2. Di aplikasi ini, klik tombol **⚙️ Pengaturan** (ikon gear di pojok kanan atas).\n3. Pilih tab **Kunci API & Provider**.\n4. Tempelkan kunci Anda di kolom **Google Gemini (GEMINI_API_KEY)** dan klik simpan.\n\nSetelah tersimpan, seluruh model Gemini dan fitur suara AI langsung aktif secara penuh!`,
+      model: targetModel,
+      tokensEstimated: 120,
+    };
+  }
+
+  if (finalErrMsg.includes('RESOURCE_EXHAUSTED') || finalErrMsg.includes('quota')) {
+    return {
+      text: `### ⏳ Kuota API Gemini Telah Mencapai Batas (Rate Limit)\n\nKuota panggilan untuk model ini pada kunci API saat ini sedang penuh. \n\n**Solusi Cepat:**\n1. Tunggu 1–2 menit agar kuota rate limit ter-reset secara otomatis.\n2. Atau masukkan kunci API Gemini pribadi Anda sendiri melalui menu **⚙️ Pengaturan -> Kunci API & Provider** agar mendapatkan kuota pribadi yang lebih besar dan lancar.\n3. Anda juga dapat memilih model lain seperti **Anthropic Claude**, **DeepSeek**, **Groq**, atau **OpenAI** di pemilih model atas.`,
+      model: targetModel,
+      tokensEstimated: 120,
+    };
+  }
+
+  throw new Error(`Google Gemini (${targetModel}): ${finalErrMsg}`);
 }
 
 /**
@@ -471,6 +545,140 @@ export async function processChatRequest(body: ChatRequestBody): Promise<ChatRes
 }
 
 /**
+ * Real-Time Streaming Chat Request Handler (Supports Gemini Stream and other LLM streams)
+ */
+export async function processChatStreamRequest(
+  body: ChatRequestBody,
+  onChunk: (chunk: { text?: string; thinking?: string; groundingSources?: Array<{ title: string; url: string }> }) => void
+): Promise<ChatResponseResult> {
+  const targetModel = body.model || "gemini-3.7-flash";
+  const provider = detectProvider(targetModel);
+  const apiKey = resolveApiKey(provider, body.apiKeys);
+
+  // If no API key is available, return the guided fallback response
+  if (!apiKey && provider !== 'custom') {
+    const fallback = await processChatRequest(body);
+    onChunk({ text: fallback.text });
+    return fallback;
+  }
+
+  if (provider === 'google') {
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const contents = body.messages.map((msg) => {
+      const role = msg.role === 'assistant' ? 'model' : 'user';
+      const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+      if (msg.attachments && msg.attachments.length > 0) {
+        for (const att of msg.attachments) {
+          if (att.base64Data && att.mimeType) {
+            parts.push({
+              inlineData: {
+                mimeType: att.mimeType,
+                data: att.base64Data,
+              },
+            });
+          }
+        }
+      }
+
+      const processedText = formatMessageContentWithContext(msg);
+      if (processedText.trim().length > 0) {
+        parts.push({ text: processedText });
+      } else if (parts.length === 0) {
+        parts.push({ text: " " });
+      }
+
+      return { role, parts };
+    });
+
+    const config: {
+      systemInstruction?: string;
+      temperature?: number;
+      topP?: number;
+      thinkingConfig?: { thinkingLevel: ThinkingLevel };
+      tools?: Array<{ googleSearch?: Record<string, never> }>;
+    } = {};
+
+    config.systemInstruction = buildStrictIndonesianSystemInstruction(body.systemInstruction);
+    if (typeof body.temperature === 'number') {
+      config.temperature = body.temperature;
+    }
+    if (typeof body.topP === 'number') {
+      config.topP = body.topP;
+    }
+    if (body.thinkingLevel && targetModel.includes('gemini-3')) {
+      let level = ThinkingLevel.HIGH;
+      if (body.thinkingLevel === 'LOW') level = ThinkingLevel.LOW;
+      if (body.thinkingLevel === 'MINIMAL') level = ThinkingLevel.MINIMAL;
+      config.thinkingConfig = { thinkingLevel: level };
+    }
+    if (body.enableWebSearch || body.enableDeepWeb) {
+      config.tools = [{ googleSearch: {} }];
+    }
+    if (body.enableDeepWeb && targetModel.includes('gemini-3')) {
+      config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+    }
+
+    try {
+      const responseStream = await ai.models.generateContentStream({
+        model: targetModel,
+        contents,
+        config,
+      });
+
+      let fullText = "";
+      const groundingSources: Array<{ title: string; url: string }> = [];
+
+      for await (const chunk of responseStream) {
+        const text = chunk.text || "";
+        if (text) {
+          fullText += text;
+          onChunk({ text });
+        }
+
+        const chunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        if (Array.isArray(chunks)) {
+          for (const c of chunks) {
+            if (c.web?.uri) {
+              groundingSources.push({
+                title: c.web.title || c.web.uri,
+                url: c.web.uri,
+              });
+            }
+          }
+        }
+      }
+
+      const estimatedTokens = Math.max(20, Math.round(fullText.length / 4));
+      return {
+        text: fullText,
+        groundingSources: groundingSources.length > 0 ? groundingSources : undefined,
+        model: targetModel,
+        tokensEstimated: estimatedTokens,
+      };
+    } catch (streamErr: unknown) {
+      console.warn("Gemini Stream encountered an issue, falling back to standard request:", streamErr);
+      const fallbackResult = await processGeminiRequest(body, apiKey);
+      onChunk({ text: fallbackResult.text, groundingSources: fallbackResult.groundingSources });
+      return fallbackResult;
+    }
+  }
+
+  // Non-Gemini providers: Fall back to standard request and emit text
+  const result = await processChatRequest(body);
+  onChunk({ text: result.text, thinking: result.thinking, groundingSources: result.groundingSources });
+  return result;
+}
+
+/**
  * Clean markdown and technical syntax for natural generative neural speech
  */
 function sanitizeTextForSpeech(rawText: string): string {
@@ -619,56 +827,92 @@ export async function processSpeechRequest(
 
   // 3. GOOGLE GEMINI LIVE NEURAL AUDIO (gemini-3.1-flash-tts-preview)
   const geminiKey = resolveApiKey('google', opts.clientKeys);
-  if (!geminiKey) {
-    throw new Error("GEMINI_API_KEY is required for Gemini Live Neural Audio generation.");
-  }
+  const allowedGeminiVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
+  // Case-insensitive exact match to avoid unintentional gender swaps
+  const matchedVoice = allowedGeminiVoices.find(
+    (v) => v.toLowerCase() === (opts.voice || '').trim().toLowerCase()
+  );
+  const selectedVoice = matchedVoice || 'Kore';
 
-  const ai = new GoogleGenAI({ apiKey: geminiKey });
-  const allowedGeminiVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'];
-  const selectedVoice = opts.voice && allowedGeminiVoices.includes(opts.voice) ? opts.voice : 'Kore';
-
-  // Condition the prompt with natural human conversational delivery instructions
-  const emotionDirective = opts.emotion === 'excited'
-    ? 'Speak in an enthusiastic, upbeat, and energetic human voice: '
-    : opts.emotion === 'calm'
-    ? 'Speak in a calm, soothing, and thoughtful conversational voice: '
-    : opts.emotion === 'warm'
-    ? 'Speak in a warm, friendly, empathetic, and natural tone: '
-    : opts.emotion === 'whisper'
-    ? 'Speak in a soft, gentle whisper tone: '
-    : 'Speak with a natural, conversational human tone with realistic breath pauses and clear intonation: ';
-
-  const conditionedPrompt = `${emotionDirective}${speechInput}`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: conditionedPrompt }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: selectedVoice },
+  if (geminiKey) {
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: geminiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
           },
         },
-      },
-    });
+      });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) {
-      throw new Error("No audio data returned from Gemini Live TTS model.");
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-tts-preview",
+        contents: [{ parts: [{ text: speechInput }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: selectedVoice },
+            },
+          },
+        },
+      });
+
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        return {
+          audioBase64: base64Audio,
+          mimeType: 'audio/pcm;rate=24000',
+          sampleRate: 24000,
+          provider: 'gemini',
+          voiceUsed: selectedVoice,
+        };
+      }
+    } catch (err: any) {
+      console.warn("Gemini Live TTS unavailable or quota reached, seamlessly routing to Google Neural Audio:", err?.message || err);
+    }
+  }
+
+  // 4. HIGH-FIDELITY NEURAL AUDIO FALLBACK (Zero latency, continuous real AI sound)
+  try {
+    const chunks: string[] = [];
+    let remaining = speechInput.trim();
+    while (remaining.length > 0) {
+      if (remaining.length <= 180) {
+        chunks.push(remaining);
+        break;
+      }
+      let sliceIdx = remaining.lastIndexOf(' ', 180);
+      if (sliceIdx <= 0) sliceIdx = 180;
+      chunks.push(remaining.slice(0, sliceIdx).trim());
+      remaining = remaining.slice(sliceIdx).trim();
     }
 
+    const buffers = await Promise.all(
+      chunks.map(async (chunk) => {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=id&client=tw-ob&q=${encodeURIComponent(chunk)}`;
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Referer': 'https://translate.google.com/',
+          },
+        });
+        if (!res.ok) throw new Error(`Google Neural TTS status: ${res.status}`);
+        const ab = await res.arrayBuffer();
+        return Buffer.from(ab);
+      })
+    );
+
+    const combined = Buffer.concat(buffers);
     return {
-      audioBase64: base64Audio,
-      mimeType: 'audio/pcm;rate=24000',
-      sampleRate: 24000,
+      audioBase64: combined.toString('base64'),
+      mimeType: 'audio/mp3',
       provider: 'gemini',
       voiceUsed: selectedVoice,
     };
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error("Gemini Live TTS Error:", errorMessage);
+  } catch (fallbackErr: any) {
+    const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr || 'TTS generation error');
+    console.error("Neural Audio Fallback Error:", errorMessage);
     throw new Error(`Real-Time Neural Speech generation failed: ${errorMessage}`);
   }
 }

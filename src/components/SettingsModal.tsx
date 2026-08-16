@@ -16,6 +16,7 @@ import {
   Copy, 
   RefreshCw, 
   Terminal,
+  Globe,
   Cpu,
   Volume2,
   Key,
@@ -820,6 +821,76 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
                   HIGH enables step-by-step reasoning tokens for Claude 3.7 Sonnet, DeepSeek R1, and Gemini 3 Pro.
                 </p>
               </div>
+
+              {/* Deep Web & Live Search Grounding */}
+              <div className="pt-3 border-t border-neutral-850 space-y-3">
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-950 border border-purple-900/30 hover:border-purple-800/50 transition-colors">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-purple-400" />
+                      <span className="text-xs font-semibold text-neutral-100">Mode Deep Web & Deep Research</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 font-semibold">
+                        Investigatif
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                      Mengaktifkan investigasi mendalam, riset data tersembunyi, analisis protokol kriptografi & verifikasi silang multi-lapisan.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateGenerationSettings({
+                        ...generationSettings,
+                        enableDeepWeb: !generationSettings.enableDeepWeb,
+                      })
+                    }
+                    className={`w-11 h-6 rounded-full transition-colors relative shrink-0 p-0.5 border ${
+                      generationSettings.enableDeepWeb
+                        ? 'bg-purple-600 border-purple-500'
+                        : 'bg-neutral-800 border-neutral-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                        generationSettings.enableDeepWeb ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-950 border border-neutral-850 hover:border-neutral-800 transition-colors">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-sky-400" />
+                      <span className="text-xs font-semibold text-neutral-100">Live Web Search Grounding</span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                      Hubungkan AI ke pencarian internet langsung untuk menyajikan informasi terkini beserta tautan sumber web.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateGenerationSettings({
+                        ...generationSettings,
+                        enableWebSearch: !generationSettings.enableWebSearch,
+                      })
+                    }
+                    className={`w-11 h-6 rounded-full transition-colors relative shrink-0 p-0.5 border ${
+                      generationSettings.enableWebSearch
+                        ? 'bg-sky-600 border-sky-500'
+                        : 'bg-neutral-800 border-neutral-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                        generationSettings.enableWebSearch ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -979,12 +1050,16 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
 
               {/* Persona Karakter Bawaan */}
               <div className="space-y-2.5 pt-2 border-t border-neutral-850">
-                <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block">
-                  Pilihan Karakter Persona Bawaan (Preset)
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block">
+                    Pilihan Preset Persona AI
+                  </label>
+                  <span className="text-[11px] text-neutral-400">Normal, Gen Z, Anak Kecil, Introvert & Spesialis</span>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {SYSTEM_PERSONAS.map((p) => {
                     const isSelected = p.id === selectedPersona.id;
+                    const emoji = p.id === 'gen_z' ? '⚡' : p.id === 'anak_kecil' ? '🧸' : p.id === 'introvert' ? '🌙' : p.id === 'developer' ? '💻' : p.id === 'creative' ? '🎨' : p.id === 'analyst' ? '📊' : '🤖';
                     return (
                       <button
                         key={p.id}
@@ -992,17 +1067,27 @@ CUSTOM_BASE_URL="${apiKeys.customBaseUrl || 'http://localhost:11434/v1'}"
                         onClick={() => {
                           onSelectPersona(p);
                           onUpdateCustomSystemInstruction(p.prompt);
-                          onShowToast(`Persona ${p.name} dipilih!`, 'success');
+                          onShowToast(`Preset Persona "${p.name}" aktif!`, 'success');
                         }}
-                        className={`p-3 rounded-2xl border text-left transition-all ${
+                        className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
                           isSelected
-                            ? 'bg-neutral-800 border-sky-500/60 text-white shadow-xs'
-                            : 'bg-neutral-950 border-neutral-800/80 text-neutral-300 hover:bg-neutral-850'
+                            ? 'bg-neutral-800 border-sky-500/60 text-white shadow-xs ring-1 ring-sky-500/30'
+                            : 'bg-neutral-950 border-neutral-800/80 text-neutral-300 hover:bg-neutral-850 hover:border-neutral-700'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-xs text-neutral-100">{p.name}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{emoji}</span>
+                            <span className="font-semibold text-xs text-neutral-100">{p.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {p.badge && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-400 font-medium">
+                                {p.badge}
+                              </span>
+                            )}
+                            {isSelected && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                          </div>
                         </div>
                         <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">{p.role}</p>
                       </button>

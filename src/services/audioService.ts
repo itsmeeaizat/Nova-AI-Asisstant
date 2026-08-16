@@ -14,6 +14,20 @@ export interface AudioState {
   voiceName: string | null;
 }
 
+export interface VoiceOptions {
+  voice?: string;
+  provider?: 'gemini' | 'openai' | 'elevenlabs';
+  speed?: number;
+  emotion?: string;
+  apiKeys?: any;
+}
+
+interface StreamQueueItem {
+  id: number;
+  text: string;
+  audioPromise: Promise<AudioBuffer | null>;
+}
+
 class AudioService {
   private currentAudio: HTMLAudioElement | null = null;
   private currentAudioUrl: string | null = null;
@@ -31,8 +45,24 @@ class AudioService {
   private stateListeners: Array<(state: AudioState) => void> = [];
   private frequencyListeners: Array<(frequencies: Uint8Array) => void> = [];
 
+  // Active Streaming Voice Session State
+  private activeStreamSession: {
+    sessionId: string;
+    messageId: string;
+    options: VoiceOptions;
+    config: EndpointConfig;
+    rawBuffer: string;
+    queue: StreamQueueItem[];
+    nextId: number;
+    playIndex: number;
+    isPlaying: boolean;
+    isFinished: boolean;
+    isAborted: boolean;
+    abortController: AbortController;
+  } | null = null;
+
   constructor() {
-    // Lazy AudioContext initialization
+    // Web Audio lazy initialization
   }
 
   private getAudioContext(sampleRate: number = 24000): AudioContext {
@@ -48,17 +78,16 @@ class AudioService {
 
   public onStateChange(listener: (state: AudioState) => void): () => void {
     this.stateListeners.push(listener);
-    // Send immediate initial state
     listener(this.getState());
     return () => {
-      this.stateListeners = this.stateListeners.filter(l => l !== listener);
+      this.stateListeners = this.stateListeners.filter((l) => l !== listener);
     };
   }
 
   public onFrequencyData(listener: (frequencies: Uint8Array) => void): () => void {
     this.frequencyListeners.push(listener);
     return () => {
-      this.frequencyListeners = this.frequencyListeners.filter(l => l !== listener);
+      this.frequencyListeners = this.frequencyListeners.filter((l) => l !== listener);
     };
   }
 
@@ -74,7 +103,7 @@ class AudioService {
 
   private notify(): void {
     const state = this.getState();
-    this.stateListeners.forEach(fn => fn(state));
+    this.stateListeners.forEach((fn) => fn(state));
   }
 
   private startFrequencyTracker(analyser: AnalyserNode) {
@@ -86,13 +115,12 @@ class AudioService {
 
     const update = () => {
       if (!this.isSpeaking) {
-        // Send flat zero array
         dataArray.fill(0);
-        this.frequencyListeners.forEach(fn => fn(dataArray));
+        this.frequencyListeners.forEach((fn) => fn(dataArray));
         return;
       }
       analyser.getByteFrequencyData(dataArray);
-      this.frequencyListeners.forEach(fn => fn(dataArray));
+      this.frequencyListeners.forEach((fn) => fn(dataArray));
       this.animFrameId = requestAnimationFrame(update);
     };
 
@@ -100,6 +128,13 @@ class AudioService {
   }
 
   public stop(): void {
+    // Abort stream session if active
+    if (this.activeStreamSession) {
+      this.activeStreamSession.isAborted = true;
+      this.activeStreamSession.abortController.abort();
+      this.activeStreamSession = null;
+    }
+
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -110,7 +145,7 @@ class AudioService {
         this.currentSourceNode.stop();
         this.currentSourceNode.disconnect();
       } catch (e) {
-        // Ignore if already stopped
+        // Ignore
       }
       this.currentSourceNode = null;
     }
@@ -126,6 +161,10 @@ class AudioService {
       this.currentAudioUrl = null;
     }
 
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
     this.isSpeaking = false;
     this.isLoading = false;
     this.activeMessageId = null;
@@ -135,12 +174,24 @@ class AudioService {
   }
 
   /**
-   * Play PCM 16-bit 24kHz raw audio returned by Gemini Live
+   * Helper to sanitize markdown and technical syntax for spoken speech
    */
-  private async playPcm24k(base64Data: string, messageId?: string, voiceName?: string): Promise<void> {
-    this.stop();
-    const ctx = this.getAudioContext(24000);
+  public sanitizeForSpeech(text: string): string {
+    return text
+      .replace(/```[\s\S]*?```/g, ' [potongan kode] ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/https?:\/\/[^\s]+/g, ' tautan ')
+      .replace(/[*#_~>|]/g, ' ')
+      .replace(/^[\s\d.-]+(?=[A-Za-z])/gm, '') // Remove bullet numbers e.g. "1. " at line starts
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
+  /**
+   * Decode raw PCM 16-bit 24kHz (Gemini Live) into Web Audio AudioBuffer
+   */
+  private decodePcm24k(base64Data: string, ctx: AudioContext): AudioBuffer {
     const binaryString = atob(base64Data);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
@@ -148,7 +199,6 @@ class AudioService {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    // Convert 16-bit PCM little endian into float32
     const int16Array = new Int16Array(bytes.buffer);
     const float32Array = new Float32Array(int16Array.length);
     for (let i = 0; i < int16Array.length; i++) {
@@ -157,162 +207,345 @@ class AudioService {
 
     const audioBuffer = ctx.createBuffer(1, float32Array.length, 24000);
     audioBuffer.getChannelData(0).set(float32Array);
-
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 64;
-    source.connect(analyser);
-    analyser.connect(ctx.destination);
-
-    this.currentSourceNode = source;
-    this.analyserNode = analyser;
-    this.isSpeaking = true;
-    this.isLoading = false;
-    this.activeMessageId = messageId || null;
-    this.activeProvider = 'gemini';
-    this.activeVoiceName = voiceName || 'Kore';
-    this.notify();
-    this.startFrequencyTracker(analyser);
-
-    source.onended = () => {
-      if (this.currentSourceNode === source) {
-        this.stop();
-      }
-    };
-
-    source.start(0);
+    return audioBuffer;
   }
 
   /**
-   * Play Standard MP3 / WAV encoded audio returned by OpenAI Audio API or ElevenLabs
+   * Decode encoded MP3 / WAV into Web Audio AudioBuffer
    */
-  private async playEncodedAudio(
-    base64Data: string,
-    mimeType: string = 'audio/mp3',
-    messageId?: string,
-    provider: 'openai' | 'elevenlabs' = 'openai',
-    voiceName?: string
-  ): Promise<void> {
-    this.stop();
-
+  private async decodeEncodedAudio(base64Data: string, ctx: AudioContext): Promise<AudioBuffer> {
     const binaryString = atob(base64Data);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
+    return await ctx.decodeAudioData(bytes.buffer.slice(0));
+  }
 
-    const blob = new Blob([bytes], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    this.currentAudioUrl = url;
+  /**
+   * Play an AudioBuffer with frequency analysis and await its completion
+   */
+  private playBuffer(audioBuffer: AudioBuffer, ctx: AudioContext): Promise<void> {
+    return new Promise((resolve) => {
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
 
-    const audio = new Audio(url);
-    this.currentAudio = audio;
-
-    // Attach Web Audio analyzer for real-time waveform reactions
-    try {
-      const ctx = this.getAudioContext();
-      const source = ctx.createMediaElementSource(audio);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 64;
       source.connect(analyser);
       analyser.connect(ctx.destination);
+
+      this.currentSourceNode = source;
       this.analyserNode = analyser;
       this.startFrequencyTracker(analyser);
-    } catch (e) {
-      // Audio element still works normally if MediaElementSource is restricted
-    }
 
-    this.isSpeaking = true;
-    this.isLoading = false;
-    this.activeMessageId = messageId || null;
-    this.activeProvider = provider;
-    this.activeVoiceName = voiceName || 'Voice';
-    this.notify();
+      source.onended = () => {
+        if (this.currentSourceNode === source) {
+          this.currentSourceNode = null;
+        }
+        resolve();
+      };
 
-    audio.onended = () => {
-      this.stop();
-    };
-
-    audio.onerror = (e) => {
-      console.error('Audio playback error:', e);
-      this.stop();
-    };
-
-    await audio.play();
+      source.start(0);
+    });
   }
 
   /**
-   * Universal Generative Neural Speech Player
-   * Fetches Real-Time Neural Speech from Gemini Live, OpenAI Audio API, or ElevenLabs
+   * Synthesize audio for a single sentence/chunk with Neural AI engine
+   */
+  private async synthesizeChunk(
+    text: string,
+    options: VoiceOptions,
+    config: EndpointConfig,
+    signal: AbortSignal
+  ): Promise<AudioBuffer | null> {
+    if (signal.aborted || !text.trim()) return null;
+
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts && !signal.aborted) {
+      try {
+        const res = await apiService.generateSpeech(
+          text,
+          {
+            voice: options.voice,
+            provider: options.provider || 'gemini',
+            speed: options.speed,
+            emotion: options.emotion,
+            apiKeys: options.apiKeys,
+          },
+          config
+        );
+
+        if (signal.aborted || !res.audioBase64) return null;
+
+        const ctx = this.getAudioContext(24000);
+        if (res.mimeType?.includes('pcm')) {
+          return this.decodePcm24k(res.audioBase64, ctx);
+        } else {
+          return await this.decodeEncodedAudio(res.audioBase64, ctx);
+        }
+      } catch (err) {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          console.warn('Neural TTS synthesis failed after retries:', err);
+          return null;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Play a chunk via Browser SpeechSynthesis Utterance with consistent vocal profile
+   */
+  private playBrowserSpeechChunk(
+    text: string,
+    speed: number = 1.0,
+    voiceName?: string,
+    signal?: AbortSignal
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      if (signal?.aborted || typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) {
+        resolve();
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text.slice(0, 800));
+      utterance.lang = 'id-ID';
+      utterance.rate = Math.max(0.8, Math.min(1.5, speed));
+
+      const isFemale = ['kore', 'zephyr', 'shimmer', 'coral', 'aoede'].includes((voiceName || 'kore').toLowerCase());
+      utterance.pitch = isFemale ? 1.15 : 0.95;
+
+      const voices = window.speechSynthesis.getVoices();
+      const idVoice = voices.find((v) => v.lang.startsWith('id') || v.lang.includes('ID'));
+      if (idVoice) {
+        utterance.voice = idVoice;
+      }
+
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
+  /**
+   * Start a Real-Time Chunk-Based Streaming Speech Session
+   * Called as soon as the user submits a message and the AI starts streaming text tokens.
+   */
+  public startStreamSession(
+    messageId: string,
+    options: VoiceOptions = {},
+    config: EndpointConfig = DEFAULT_ENDPOINT_CONFIG
+  ): void {
+    // Unconditionally terminate any previous speech (both Web Audio and Browser Speech) to avoid clashing
+    this.stop();
+
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    const sessionId = Math.random().toString(36).substring(7);
+    this.activeStreamSession = {
+      sessionId,
+      messageId,
+      options,
+      config,
+      rawBuffer: '',
+      queue: [],
+      nextId: 0,
+      playIndex: 0,
+      isPlaying: false,
+      isFinished: false,
+      isAborted: false,
+      abortController: new AbortController(),
+    };
+
+    this.activeMessageId = messageId;
+    this.activeProvider = options.provider || 'gemini';
+    this.activeVoiceName = options.voice || 'Kore';
+    this.isLoading = true;
+    this.isSpeaking = false;
+    this.notify();
+  }
+
+  /**
+   * Push incoming text token/delta from the streaming AI model response
+   */
+  public pushStreamChunk(chunkText: string): void {
+    const session = this.activeStreamSession;
+    if (!session || session.isAborted) return;
+
+    session.rawBuffer += chunkText;
+
+    // Scan for complete sentences or clauses
+    this.extractAndQueueSentences(session, false);
+  }
+
+  /**
+   * Signal that the text stream has completed from the AI model
+   */
+  public finishStream(): void {
+    const session = this.activeStreamSession;
+    if (!session || session.isAborted) return;
+
+    session.isFinished = true;
+    this.extractAndQueueSentences(session, true);
+  }
+
+  /**
+   * Sentence / Clause Boundary Extractor
+   */
+  private extractAndQueueSentences(
+    session: NonNullable<typeof this.activeStreamSession>,
+    isFinal: boolean
+  ): void {
+    while (session.rawBuffer.length > 0) {
+      // Look for natural sentence breaks
+      const sentenceRegex = /([.!?:\n]+|\s*;\s*)/g;
+      let match = sentenceRegex.exec(session.rawBuffer);
+
+      // If buffer is getting long (> 45 chars) and contains a comma or dash, split early for ultra-low latency!
+      if (!match && session.rawBuffer.length > 45) {
+        const commaMatch = /([,]| - | — )/g.exec(session.rawBuffer);
+        if (commaMatch && commaMatch.index >= 20) {
+          match = commaMatch;
+        }
+      }
+
+      if (match) {
+        const breakIndex = match.index + match[0].length;
+        const segment = session.rawBuffer.substring(0, breakIndex);
+
+        // Avoid breaking inside common abbreviations (e.g. "Dr.", "Jl.", "Rp.", "No.", "3.7")
+        if (/\b(Dr|Prof|Jl|Rp|No|dll|dsb|dst|vs|i\.e|e\.g)\.$/i.test(segment.trim()) || /\d\.\d+$/.test(segment.trim())) {
+          // Continue scanning for next punctuation
+          continue;
+        }
+
+        session.rawBuffer = session.rawBuffer.substring(breakIndex);
+        const cleanText = this.sanitizeForSpeech(segment);
+        if (cleanText.length >= 2) {
+          this.enqueueChunkForPlayback(session, cleanText);
+        }
+      } else {
+        // If final flush and remaining buffer has content
+        if (isFinal && session.rawBuffer.trim().length > 0) {
+          const cleanText = this.sanitizeForSpeech(session.rawBuffer);
+          session.rawBuffer = '';
+          if (cleanText.length >= 2) {
+            this.enqueueChunkForPlayback(session, cleanText);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Enqueue a detected sentence into the background synthesis pipeline and trigger player
+   */
+  private enqueueChunkForPlayback(
+    session: NonNullable<typeof this.activeStreamSession>,
+    sentenceText: string
+  ): void {
+    const chunkId = session.nextId++;
+    const item: StreamQueueItem = {
+      id: chunkId,
+      text: sentenceText,
+      audioPromise: this.synthesizeChunk(
+        sentenceText,
+        session.options,
+        session.config,
+        session.abortController.signal
+      ),
+    };
+
+    session.queue.push(item);
+    this.processStreamPlayQueue(session);
+  }
+
+  /**
+   * Asynchronous Sequential Audio Playback Queue
+   * Guarantees single-source audio output with zero overlap and no browser TTS clash
+   */
+  private async processStreamPlayQueue(
+    session: NonNullable<typeof this.activeStreamSession>
+  ): Promise<void> {
+    if (session.isPlaying || session.isAborted) return;
+    session.isPlaying = true;
+
+    try {
+      while (session.playIndex < session.queue.length && !session.isAborted) {
+        const item = session.queue[session.playIndex];
+
+        // Await background synthesized AudioBuffer
+        const buffer = await item.audioPromise;
+        if (session.isAborted) break;
+
+        if (buffer) {
+          this.isSpeaking = true;
+          this.isLoading = false;
+          this.activeMessageId = session.messageId;
+          this.activeProvider = session.options.provider || 'gemini';
+          this.activeVoiceName = session.options.voice || 'Kore';
+          this.notify();
+
+          // Silence any stray browser speech synthesis to ensure 100% pure neural playback
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+          }
+
+          const ctx = this.getAudioContext(24000);
+          await this.playBuffer(buffer, ctx);
+        }
+
+        session.playIndex++;
+      }
+    } catch (e) {
+      console.warn('Stream playback loop error:', e);
+    } finally {
+      session.isPlaying = false;
+
+      // Check if all chunks finished
+      if (session.isFinished && session.playIndex >= session.queue.length) {
+        this.stop();
+      }
+    }
+  }
+
+  /**
+   * Universal Instant Speech Player for existing completed messages
+   * (Uses chunked progressive synthesis for sub-second start time even on 1000+ words)
    */
   public async speakMessage(
     text: string,
-    options?: {
-      voice?: string;
-      provider?: 'gemini' | 'openai' | 'elevenlabs';
-      speed?: number;
-      emotion?: string;
-      apiKeys?: any;
-    },
+    options?: VoiceOptions,
     messageId?: string,
     config: EndpointConfig = DEFAULT_ENDPOINT_CONFIG
   ): Promise<void> {
     if (this.isSpeaking && this.activeMessageId === messageId) {
-      // Toggle pause/stop if clicking the same speaking message
       this.stop();
       return;
     }
 
-    this.stop();
-    this.isLoading = true;
-    this.activeMessageId = messageId || null;
-    this.notify();
+    const cleanText = this.sanitizeForSpeech(text);
+    if (!cleanText) return;
 
-    // Sanitize markdown, code blocks, bullet points and symbols for natural spoken speech
-    const cleanSpeechText = text
-      .replace(/```[\s\S]*?```/g, ' [potongan kode pemrograman] ')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/[*#_~>|]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    try {
-      const res = await apiService.generateSpeech(cleanSpeechText || text, options, config);
-
-      if (!res.audioBase64) {
-        throw new Error('No audio data received from generative speech engine.');
-      }
-
-      if (res.mimeType?.includes('pcm') || res.provider === 'gemini') {
-        await this.playPcm24k(res.audioBase64, messageId, res.voiceUsed || options?.voice);
-      } else {
-        await this.playEncodedAudio(
-          res.audioBase64,
-          res.mimeType || 'audio/mp3',
-          messageId,
-          (res.provider as 'openai' | 'elevenlabs') || 'openai',
-          res.voiceUsed || options?.voice
-        );
-      }
-    } catch (err) {
-      console.warn('Generative Neural Speech failed, falling back to Web Speech API:', err);
-      // Seamless fallback to browser speech synthesis (Indonesian supported)
-      try {
-        await this.speakWithBrowserTts(cleanSpeechText || text, messageId, options?.speed);
-      } catch (fallbackErr) {
-        console.error('Browser TTS fallback failed:', fallbackErr);
-        this.stop();
-        throw err;
-      }
-    }
+    this.startStreamSession(messageId || 'adhoc', options, config);
+    this.pushStreamChunk(text);
+    this.finishStream();
   }
 
   /**
-   * Browser SpeechSynthesis Fallback (Works instantly without API key / offline)
+   * Direct Browser SpeechSynthesis Fallback
    */
   public speakWithBrowserTts(text: string, messageId?: string, speed: number = 1.0): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -321,18 +554,15 @@ class AudioService {
         return;
       }
 
-      window.speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(text.slice(0, 3000));
+      this.stop();
+      const clean = this.sanitizeForSpeech(text);
+      const utterance = new SpeechSynthesisUtterance(clean.slice(0, 3000));
       utterance.lang = 'id-ID';
       utterance.rate = Math.max(0.8, Math.min(1.5, speed));
 
-      // Attempt to pick an Indonesian voice if available
       const voices = window.speechSynthesis.getVoices();
-      const idVoice = voices.find(v => v.lang.startsWith('id') || v.lang.includes('ID'));
-      if (idVoice) {
-        utterance.voice = idVoice;
-      }
+      const idVoice = voices.find((v) => v.lang.startsWith('id') || v.lang.includes('ID'));
+      if (idVoice) utterance.voice = idVoice;
 
       utterance.onstart = () => {
         this.isSpeaking = true;
@@ -348,10 +578,9 @@ class AudioService {
         resolve();
       };
 
-      utterance.onerror = (e) => {
-        console.warn('SpeechSynthesis error:', e);
+      utterance.onerror = () => {
         this.stop();
-        resolve(); // resolve gracefully
+        resolve();
       };
 
       window.speechSynthesis.speak(utterance);
