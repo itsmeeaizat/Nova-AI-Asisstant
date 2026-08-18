@@ -6,3 +6,12 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Capacitor / Android
+android/
+ios/
+node_modules/
+dist/
+.gradle/
+*.keystore
+*.jks
