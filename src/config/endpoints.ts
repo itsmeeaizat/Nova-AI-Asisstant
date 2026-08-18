@@ -67,7 +67,7 @@ export interface ApiKeysConfig {
  * Developers can optionally paste or override raw keys directly here in code:
  */
 export const RAW_DEVELOPER_API_KEYS: ApiKeysConfig = {
-  geminiApiKey: '',
+  geminiApiKey: 'Ab8RN6JHRgB9lPeTkzjOlxaMbMlPiwKKYf01LbuIB6BUPdV81A',
   anthropicApiKey: '',
   moonshotApiKey: '',
   openaiApiKey: '',
