@@ -1,0 +1,156 @@
+name: Build, Auto-Rename & Release APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Auto-Detect Existing Package ID
+        run: |
+          echo "🔍 Mendeteksi package ID yang ada di proyek secara otomatis..."
+          
+          DETECTED_PACKAGE=""
+          
+          # Cek dari build.gradle atau build.gradle.kts
+          if [ -f "app/build.gradle.kts" ]; then
+            DETECTED_PACKAGE=$(grep -m 1 'applicationId' app/build.gradle.kts | cut -d'"' -f2)
+            if [ -z "$DETECTED_PACKAGE" ]; then
+              DETECTED_PACKAGE=$(grep -m 1 'namespace' app/build.gradle.kts | cut -d'"' -f2)
+            fi
+          elif [ -f "app/build.gradle" ]; then
+            DETECTED_PACKAGE=$(grep -m 1 'applicationId' app/build.gradle | cut -d'"' -f2)
+            if [ -z "$DETECTED_PACKAGE" ]; then
+              DETECTED_PACKAGE=$(grep -m 1 'namespace' app/build.gradle | cut -d"'" -f2)
+            fi
+          fi
+          
+          echo "✅ Package ID / Namespace yang terdeteksi: $DETECTED_PACKAGE"
+          echo "DETECTED_PACKAGE=$DETECTED_PACKAGE" >> $GITHUB_ENV
+
+      - name: Auto Increment Version Code & Name
+        run: |
+          echo "📈 Menaikkan versi APK secara otomatis..."
+          BUILD_FILE=""
+          if [ -f "app/build.gradle.kts" ]; then
+            BUILD_FILE="app/build.gradle.kts"
+          elif [ -f "app/build.gradle" ]; then
+            BUILD_FILE="app/build.gradle"
+          fi
+
+          if [ -n "$BUILD_FILE" ]; then
+            CURRENT_CODE=$(grep -m 1 'versionCode' "$BUILD_FILE" | grep -o '[0-9]*')
+            if [ -n "$CURRENT_CODE" ]; then
+              NEW_CODE=$((CURRENT_CODE + 1))
+              if [[ "$BUILD_FILE" == *.kts ]]; then
+                sed -i -E "s/versionCode[[:space:]]*=[[:space:]]*[0-9]+/versionCode = $NEW_CODE/g" "$BUILD_FILE"
+              else
+                sed -i -E "s/versionCode[[:space:]]+[0-9]+/versionCode $NEW_CODE/g" "$BUILD_FILE"
+              fi
+              echo "✅ VersionCode dinaikkan menjadi: $NEW_CODE"
+            fi
+          fi
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            .gradle
+          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: Generate Release Keystore if Missing
+        run: |
+          if [ ! -f "my-upload-key.jks" ] && [ ! -f "debug.keystore" ]; then
+            echo "🔑 Generating release keystore automatically for Aizat..."
+            keytool -genkeypair -v \
+              -keystore release-auto.keystore \
+              -alias releasekey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Aizat, OU=Developer, O=App, L=City, ST=State, C=ID"
+          fi
+
+      - name: Build Release APK
+        env:
+          GRADLE_OPTS: "-Xmx2048m -Dfile.encoding=UTF-8"
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew assembleRelease
+          else
+            gradle assembleRelease
+          fi
+
+      - name: Prepare Renamed APK & ZIP Package
+        id: prep_apk
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          VERSION_NAME=$(grep -m 1 'versionName' app/build.gradle* | cut -d'"' -f2 || echo "1.0")
+          
+          NEW_APK_NAME="${REPO_NAME}-v${VERSION_NAME}-release.apk"
+          NEW_ZIP_NAME="${REPO_NAME}-v${VERSION_NAME}-release.zip"
+          mkdir -p build_output
+          cp app/build/outputs/apk/release/app-release.apk "build_output/$NEW_APK_NAME"
+          
+          # Bungkus file APK ke dalam format ZIP
+          cd build_output
+          zip "$NEW_ZIP_NAME" "$NEW_APK_NAME"
+          cd ..
+          
+          echo "apk_path=build_output/$NEW_APK_NAME" >> $GITHUB_OUTPUT
+          echo "zip_path=build_output/$NEW_ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "apk_name=$NEW_APK_NAME" >> $GITHUB_OUTPUT
+          echo "zip_name=$NEW_ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "✅ APK & ZIP berhasil disiapkan: $NEW_APK_NAME & $NEW_ZIP_NAME"
+
+      - name: Upload APK & ZIP to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.${{ github.run_number }}
+          name: "Release v1.${{ github.run_number }} (Auto Build - Aizat)"
+          body: |
+            🚀 **Automated Build Release**
+            - File APK: `${{ steps.prep_apk.outputs.apk_name }}`
+            - File Package Archive (.zip): `${{ steps.prep_apk.outputs.zip_name }}`
+            - Package ID / Namespace: `${{ env.DETECTED_PACKAGE }}`
+            - Pengembang: **Aizat**
+            - Status: Berhasil dirakit dan dideteksi otomatis oleh GitHub Actions.
+          files: |
+            ${{ steps.prep_apk.outputs.apk_path }}
+            ${{ steps.prep_apk.outputs.zip_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
