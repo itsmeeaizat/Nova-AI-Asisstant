@@ -24,7 +24,7 @@ const PLACE_KEYWORDS = [
   'uluwatu', 'ubud', 'kuta', 'sanur', 'nusa penida', 'toba', 'tmii',
   'alun-alun', 'keraton', 'istana', 'zoo', 'safari', 'aquarium', 'batur',
   'dieng', 'derawan', 'belitung', 'maratua', 'wakatobi', 'bunaken', 'toraja',
-  'pantai', 'beach', 'temple', 'waterfall', 'mountain', 'island', 'park'
+  'beach', 'temple', 'waterfall', 'mountain', 'island', 'park', 'resort', 'hotel'
 ];
 
 /**
@@ -32,6 +32,31 @@ const PLACE_KEYWORDS = [
  */
 export function extractPlacesFromMessage(content: string): DetectedPlace[] {
   if (!content || typeof content !== 'string') return [];
+
+  const lowerContent = content.toLowerCase();
+
+  // GUARD: If the text is a coding tutorial, technical guide, or programming answer,
+  // strictly do NOT extract map cards (prevents false positives on tutorials, code blocks, file paths).
+  const codingTutorialIndicators = [
+    'tutorial', 'langkah', 'step', 'kode', 'code', 'npm', 'react', 'typescript', 
+    'javascript', 'function', 'const', 'import', 'src/', 'file', 'git', 'build', 
+    'compile', 'error', 'linter', 'div', 'span', 'html', 'css', 'api', 'component',
+    'package.json', 'terminal', 'script', 'export', 'return', 'async', 'await'
+  ];
+
+  const hasCodingContext = codingTutorialIndicators.some(ind => lowerContent.includes(ind));
+  const hasStrongTravelIntent = 
+    lowerContent.includes('rekomendasi wisata') ||
+    lowerContent.includes('destinasi wisata') ||
+    lowerContent.includes('objek wisata') ||
+    lowerContent.includes('tempat liburan') ||
+    lowerContent.includes('paket tour') ||
+    lowerContent.includes('tempat rekreasi');
+
+  // If it has coding/tutorial context and lacks explicit travel intent, return no places.
+  if (hasCodingContext && !hasStrongTravelIntent) {
+    return [];
+  }
 
   const detected: DetectedPlace[] = [];
   const seenQueries = new Set<string>();
@@ -49,31 +74,27 @@ export function extractPlacesFromMessage(content: string): DetectedPlace[] {
     // Remove trailing colons or dashes
     cleanName = cleanName.replace(/[:\-–—]+$/, '').trim();
 
-    // Check if it matches place keywords or is clearly formatted as a landmark/destination
     const lowerName = cleanName.toLowerCase();
     const lowerDesc = (desc || '').toLowerCase();
-    const lowerContent = content.toLowerCase();
 
-    const isTravelContext = 
-      lowerContent.includes('wisata') || 
-      lowerContent.includes('tempat') || 
-      lowerContent.includes('liburan') || 
-      lowerContent.includes('destinasi') || 
-      lowerContent.includes('kunjungi') || 
-      lowerContent.includes('lokasi') || 
-      lowerContent.includes('tour') || 
-      lowerContent.includes('travel');
-
+    // Must contain a place keyword OR have an explicit location hint in parentheses
     const hasPlaceKeyword = PLACE_KEYWORDS.some(kw => 
       lowerName.includes(kw) || lowerDesc.includes(kw)
     );
+    const hasParenthesizedLocation = !!rawLocation || /\([^)]+(?:kabupaten|kota|provinsi|bali|jakarta|jawa|sumatera|sulawesi|kalimantan|papua|maluku|ntb|ntt)[^)]*\)/i.test(rawName);
 
-    // If not in travel context and no place keyword, skip
-    if (!isTravelContext && !hasPlaceKeyword) return;
+    if (!hasPlaceKeyword && !hasParenthesizedLocation && !hasStrongTravelIntent) {
+      return;
+    }
 
-    // Filter out common non-place headers like "Tips Liburan", "Kesimpulan", "Biaya", etc.
-    const nonPlaceWords = ['tips', 'kesimpulan', 'catatan', 'biaya', 'rekomendasi', 'transportasi', 'kuliner', 'akomodasi', 'penginapan', 'waktu terbaik', 'itinerary', 'rute', 'perlengkapan', 'budget'];
-    if (nonPlaceWords.some(w => lowerName.startsWith(w) || lowerName === w)) return;
+    // Filter out common non-place headers
+    const nonPlaceWords = [
+      'tips', 'kesimpulan', 'catatan', 'biaya', 'rekomendasi', 'transportasi', 
+      'kuliner', 'akomodasi', 'penginapan', 'waktu terbaik', 'itinerary', 'rute', 
+      'perlengkapan', 'budget', 'langkah', 'cara', 'instalasi', 'contoh', 'pembukaan',
+      'kesimpulan', 'ringkasan', 'pendahuluan', 'penutup'
+    ];
+    if (nonPlaceWords.some(w => lowerName === w || lowerName.startsWith(w + ' '))) return;
 
     // Extract location in parentheses e.g. "Candi Prambanan (Sleman, Yogyakarta)"
     let locationHint = rawLocation?.trim();
@@ -115,21 +136,7 @@ export function extractPlacesFromMessage(content: string): DetectedPlace[] {
     addPlace(match[1], match[2], match[3]);
   }
 
-  // Pattern 2: Markdown headers: e.g. "### 1. Pantai Kuta, Bali" or "## Candi Borobudur"
-  const headerRegex = /(?:^|\n)#{1,4}\s+(?:[\d]+\.\s*)?([^\n]+)/g;
-  while ((match = headerRegex.exec(content)) !== null) {
-    const rawHeader = match[1];
-    if (rawHeader.includes('**')) {
-      const boldInside = rawHeader.match(/\*\*([^*]+)\*\*/);
-      if (boldInside) {
-        addPlace(boldInside[1]);
-        continue;
-      }
-    }
-    addPlace(rawHeader);
-  }
-
-  // Pattern 3: Standalone bold titles with location in brackets: e.g. "**Kawah Putih** (Bandung)"
+  // Pattern 2: Standalone bold titles with location in brackets: e.g. "**Kawah Putih** (Bandung)"
   const boldRegex = /\*\*([A-Z][a-zA-Z0-9\s'’-]{2,50})\*\*(?:\s*\(([^)]+)\))?/g;
   while ((match = boldRegex.exec(content)) !== null) {
     addPlace(match[1], match[2]);
