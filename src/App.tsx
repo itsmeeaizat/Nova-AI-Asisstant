@@ -242,6 +242,34 @@ function MainAppContent() {
   const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
   const activeMessages = activeSession?.messages || [];
 
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
+  const [matchCursor, setMatchCursor] = React.useState(0);
+
+  const matchingMessages = React.useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return activeMessages
+      .map((m, idx) => ({ message: m, index: idx }))
+      .filter(({ message }) => message.content.toLowerCase().includes(q));
+  }, [activeMessages, searchQuery]);
+
+  const handleJumpToMatch = (dir: 'next' | 'prev') => {
+    if (matchingMessages.length === 0) return;
+    let nextIdx = dir === 'next' ? matchCursor + 1 : matchCursor - 1;
+    if (nextIdx >= matchingMessages.length) nextIdx = 0;
+    if (nextIdx < 0) nextIdx = matchingMessages.length - 1;
+    setMatchCursor(nextIdx);
+
+    const targetMsg = matchingMessages[nextIdx];
+    if (targetMsg) {
+      const el = document.getElementById(`message-bubble-${targetMsg.message.id || targetMsg.index}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  };
+
   // Persist sessions to localStorage
   React.useEffect(() => {
     try {
@@ -970,6 +998,13 @@ function MainAppContent() {
         onToggleAutoPlayReplies={handleToggleAutoPlaySpeech}
         isSpeakingAudio={isSpeakingAudio}
         onStopAudio={() => audioService.stop()}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        isSearchOpen={isSearchOpen}
+        setIsSearchOpen={setIsSearchOpen}
+        matchingMessages={matchingMessages}
+        matchCursor={matchCursor}
+        onJumpToMatch={handleJumpToMatch}
       />
 
       {/* Workspace Body (Sidebar + Chat Area + Input) */}

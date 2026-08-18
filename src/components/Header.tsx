@@ -16,7 +16,10 @@ import {
   Radio,
   Volume2,
   Sun,
-  Moon
+  Moon,
+  Search,
+  X,
+  ChevronUp
 } from 'lucide-react';
 import { ModelOption, SystemPersona } from '../config/endpoints';
 import { useTheme } from '../context/ThemeContext';
@@ -39,6 +42,13 @@ interface HeaderProps {
   onToggleAutoPlayReplies?: () => void;
   isSpeakingAudio?: boolean;
   onStopAudio?: () => void;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  isSearchOpen: boolean;
+  setIsSearchOpen: (open: boolean) => void;
+  matchingMessages: Array<{ message: any; index: number }>;
+  matchCursor: number;
+  onJumpToMatch: (dir: 'next' | 'prev') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -59,6 +69,13 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAutoPlayReplies,
   isSpeakingAudio,
   onStopAudio,
+  searchQuery,
+  setSearchQuery,
+  isSearchOpen,
+  setIsSearchOpen,
+  matchingMessages,
+  matchCursor,
+  onJumpToMatch,
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false);
@@ -66,6 +83,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const modelDropdownRef = React.useRef<HTMLDivElement>(null);
   const personaDropdownRef = React.useRef<HTMLDivElement>(null);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -268,6 +286,81 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Kustomisasi Prompt & Persona...</span>
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Search Bar in Header (Beside Model & Persona selectors) */}
+        <div className="relative flex items-center">
+          {!isSearchOpen ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsSearchOpen(true);
+                setTimeout(() => searchInputRef.current?.focus(), 100);
+              }}
+              className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium ${
+                theme === 'light'
+                  ? 'bg-neutral-100 border-neutral-300 text-neutral-700 hover:bg-neutral-200'
+                  : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
+              }`}
+              title="Cari pesan dalam percakapan"
+              aria-label="Cari pesan"
+            >
+              <Search className="w-4 h-4 text-sky-400" />
+              <span className="hidden lg:inline">Cari</span>
+            </button>
+          ) : (
+            <div className={`p-1.5 px-2.5 rounded-xl border shadow-lg flex items-center gap-2 w-52 sm:w-64 animate-in fade-in zoom-in-95 duration-150 ${
+              theme === 'light'
+                ? 'bg-white border-neutral-300 text-neutral-900'
+                : 'bg-neutral-900 border-neutral-700 text-neutral-100'
+            }`}>
+              <Search className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari pesan..."
+                className="bg-transparent border-none outline-none text-xs w-full placeholder:text-neutral-400"
+              />
+              {searchQuery && (
+                <span className="text-[10px] text-neutral-400 shrink-0">
+                  {matchingMessages.length > 0 ? `${matchCursor + 1}/${matchingMessages.length}` : '0/0'}
+                </span>
+              )}
+              {matchingMessages.length > 0 && (
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onJumpToMatch('prev')}
+                    className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors"
+                    title="Sebelumnya"
+                  >
+                    <ChevronUp className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onJumpToMatch('next')}
+                    className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors"
+                    title="Berikutnya"
+                  >
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSearchOpen(false);
+                  setSearchQuery('');
+                }}
+                className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors text-neutral-400 hover:text-neutral-200 ml-0.5"
+                title="Tutup"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </div>

@@ -21,11 +21,7 @@ import {
   Globe,
   FileText,
   MapPin,
-  Camera,
-  Search,
-  X,
-  ChevronUp,
-  ChevronDown
+  Camera
 } from 'lucide-react';
 import { Attachment, Message, VoiceSettings } from '../types/chat';
 import { ModelOption, ApiKeysConfig } from '../config/endpoints';
@@ -69,35 +65,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [isLoadingSpeech, setIsLoadingSpeech] = React.useState(false);
   const [showScrollBottom, setShowScrollBottom] = React.useState(false);
   const [lightboxAttachment, setLightboxAttachment] = React.useState<Attachment | null>(null);
-
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const [matchCursor, setMatchCursor] = React.useState(0);
-
-  const matchingMessages = React.useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return messages
-      .map((m, idx) => ({ message: m, index: idx }))
-      .filter(({ message }) => message.content.toLowerCase().includes(q));
-  }, [messages, searchQuery]);
-
-  const handleJumpToMatch = (dir: 'next' | 'prev') => {
-    if (matchingMessages.length === 0) return;
-    let nextIdx = dir === 'next' ? matchCursor + 1 : matchCursor - 1;
-    if (nextIdx >= matchingMessages.length) nextIdx = 0;
-    if (nextIdx < 0) nextIdx = matchingMessages.length - 1;
-    setMatchCursor(nextIdx);
-
-    const targetMsg = matchingMessages[nextIdx];
-    if (targetMsg) {
-      const el = document.getElementById(`message-bubble-${targetMsg.message.id || targetMsg.index}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  };
 
   // Subscribe to audio state
   React.useEffect(() => {
@@ -171,83 +138,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   return (
     <div className={`flex-1 relative flex flex-col h-full overflow-hidden ${theme === 'light' ? 'bg-white text-neutral-900' : 'bg-neutral-950 text-neutral-100'}`}>
-      {/* Top Search Bar & Toggle */}
-      <div className="absolute top-3 right-4 sm:right-8 z-20 flex items-center gap-2">
-        {!isSearchOpen ? (
-          <button
-            type="button"
-            onClick={() => {
-              setIsSearchOpen(true);
-              setTimeout(() => searchInputRef.current?.focus(), 100);
-            }}
-            className={`p-2 rounded-xl border shadow-sm transition-all flex items-center gap-1.5 text-xs font-medium ${
-              theme === 'light'
-                ? 'bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50'
-                : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
-            }`}
-            title="Cari pesan dalam percakapan"
-            aria-label="Cari pesan"
-          >
-            <Search className="w-4 h-4 text-sky-500" />
-            <span className="hidden sm:inline">Cari Pesan</span>
-          </button>
-        ) : (
-          <div className={`p-2 rounded-2xl border shadow-lg flex items-center gap-2 w-72 sm:w-80 animate-in fade-in zoom-in-95 duration-150 ${
-            theme === 'light'
-              ? 'bg-white/95 backdrop-blur-md border-neutral-300 text-neutral-900'
-              : 'bg-neutral-900/95 backdrop-blur-md border-neutral-700 text-neutral-100'
-          }`}>
-            <Search className="w-4 h-4 text-sky-500 shrink-0 ml-1" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setMatchCursor(0);
-              }}
-              placeholder="Cari kata di pesan..."
-              className="bg-transparent border-none outline-none text-xs w-full placeholder:text-neutral-400"
-            />
-            {searchQuery && (
-              <span className="text-[10px] text-neutral-400 shrink-0">
-                {matchingMessages.length > 0 ? `${matchCursor + 1}/${matchingMessages.length}` : '0/0'}
-              </span>
-            )}
-            {matchingMessages.length > 0 && (
-              <div className="flex items-center gap-0.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleJumpToMatch('prev')}
-                  className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors"
-                  title="Pesan sebelumnya"
-                >
-                  <ChevronUp className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleJumpToMatch('next')}
-                  className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors"
-                  title="Pesan berikutnya"
-                >
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setIsSearchOpen(false);
-                setSearchQuery('');
-              }}
-              className="p-1 hover:bg-neutral-700/20 rounded-md transition-colors text-neutral-400 hover:text-neutral-200 ml-0.5"
-              title="Tutup pencarian"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-      </div>
 
       {/* Scrollable Message List */}
       <div
@@ -461,7 +351,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         {isMsgSpeaking ? (
                           <VolumeX className="w-3.5 h-3.5" />
                         ) : (
-                          <Volume2 className={`w-3.5 h-3.5 ${isLoadingSpeech && activeSpeechId === msg.id ? 'animate-spin' : ''}`} />
+                          <Volume2 className={`w-3.5 h-3.5 ${isLoadingSpeech && activeSpeechId === msg.id ? 'animate-pulse text-amber-400' : ''}`} />
                         )}
                         <span className="text-[11px] hidden sm:inline">
                           {isMsgSpeaking ? 'Playing...' : isLoadingSpeech && activeSpeechId === msg.id ? 'Synthesizing...' : 'Voice'}
