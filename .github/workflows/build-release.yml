@@ -31,82 +31,70 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
-          build-tools: 34.0.0
+          api-level: 35
+          build-tools: 35.0.0
 
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm install
 
       - name: Build Vite PWA
         run: npx vite build
         env:
           NODE_ENV: production
 
-      - name: Setup Capacitor
+      - name: Setup Capacitor Android
         run: |
-          npx cap init NovaAIAssistant com.novaai.assistant --web-dir dist
           npx cap add android
           npx cap sync android
 
       - name: Generate Release Keystore
         run: |
-          if [ ! -f "android/app/my-upload-key.jks" ]; then
-            echo "Generating release keystore..."
-            keytool -genkeypair -v \
-              -keystore android/app/my-upload-key.jks \
-              -alias upload \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass android \
-              -keypass android \
-              -dname "CN=Nova AI, OU=Developer, O=App, L=City, ST=State, C=ID"
-          fi
+          keytool -genkeypair -v \
+            -keystore android/app/release.keystore \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Nova AI, OU=Developer, O=App, L=City, ST=State, C=ID"
 
-      - name: Configure Signing
+      - name: Patch Signing Config
         run: |
-          cat > android/app/build.gradle << 'GRADLE'
-          apply plugin: 'com.android.application'
+          # Add signing config to the Capacitor-generated build.gradle
+          cd android
+          python3 << 'PYEOF'
+          with open('app/build.gradle', 'r') as f:
+              content = f.read()
           
-          android {
-              namespace "com.novaai.assistant"
-              compileSdk 34
-              
-              defaultConfig {
-                  applicationId "com.novaai.assistant"
-                  minSdk 23
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
-              
-              signingConfigs {
-                  release {
-                      storeFile file('my-upload-key.jks')
-                      storePassword 'android'
-                      keyAlias 'upload'
-                      keyPassword 'android'
-                  }
-              }
-              
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.release
-                      minifyEnabled false
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-                  }
-              }
-              
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
+          signing = '''
+          android.signingConfigs {
+              release {
+                  storeFile file('release.keystore')
+                  storePassword 'android'
+                  keyAlias 'upload'
+                  keyPassword 'android'
               }
           }
+          '''
           
-          dependencies {
-              implementation project(':capacitor-android')
-          }
-          GRADLE
+          # Insert signing config before buildTypes
+          content = content.replace(
+              'android.buildTypes {',
+              signing + '\nandroid.buildTypes {'
+          )
+          
+          # Add signingConfig to release build type
+          content = content.replace(
+              'release {',
+              'release {\n            signingConfig android.signingConfigs.release'
+          )
+          
+          with open('app/build.gradle', 'w') as f:
+              f.write(content)
+          
+          print("Patched build.gradle with signing config")
+          PYEOF
 
       - name: Build APK
         run: |
@@ -122,7 +110,6 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk build_output/NovaAI-Assistant-v1.0-release.apk
           cd build_output
           zip NovaAI-Assistant-v1.0-release.zip NovaAI-Assistant-v1.0-release.apk
-          cd ..
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
