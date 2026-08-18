@@ -49,7 +49,7 @@ jobs:
           # Copy the PWA icon as Capacitor assets source, then generate
           mkdir -p resources
           cp public/icons/icon-1024.png resources/icon.png 2>/dev/null || cp public/icons/icon-512.png resources/icon.png
-          npx @capacitor/assets@latest generate --android --icon
+          npx @capacitor/assets@latest generate --android
         continue-on-error: false
 
       - name: Generate Release Keystore
